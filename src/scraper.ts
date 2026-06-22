@@ -1,0 +1,167 @@
+import { FieldMarker, Product } from './types.js';
+
+const SOURCE_URL = 'https://www.bulkbuddy.co/product-category/cannabis/craft-cannabis-flowers/';
+
+const missing = <T>(note = 'Not found on listing page'): FieldMarker<T> => ({ value: null, status: 'missing', note });
+const present = <T>(value: T): FieldMarker<T> => ({ value, status: 'present' });
+const derived = <T>(value: T, note: string): FieldMarker<T> => ({ value, status: 'derived', note });
+const unavailable = <T>(note: string): FieldMarker<T> => ({ value: null, status: 'unavailable', note });
+
+export async function fetchProductListing(url = SOURCE_URL): Promise<string> {
+  const response = await fetch(url, {
+    headers: {
+      'user-agent': 'CannabisShopperResearchBot/1.0 (+legal adult-use cannabis research in Canada)',
+      accept: 'text/html,application/xhtml+xml'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+
+  return response.text();
+}
+
+export function parseProducts(html: string, sourceUrl = SOURCE_URL): Product[] {
+  return splitProductCards(html)
+    .map((card) => parseProductCard(card, sourceUrl))
+    .filter((product): product is Product => Boolean(product?.name.value));
+}
+
+export async function scrapeProducts(url = SOURCE_URL): Promise<Product[]> {
+  return parseProducts(await fetchProductListing(url), url);
+}
+
+function parseProductCard(cardHtml: string, sourceUrl: string): Product | null {
+  const text = normalize(stripTags(cardHtml));
+  const productUrl = absolutize(firstMatch(cardHtml, /href=["']([^"']*\/product\/[^"']+)["']/i), sourceUrl);
+  const nameText = decodeEntities(
+    firstMatch(cardHtml, /class=["'][^"']*(?:woocommerce-loop-product__title|product-title)[^"']*["'][^>]*>(.*?)<\//is) ??
+      firstMatch(cardHtml, /<h[23][^>]*>(.*?)<\/h[23]>/is) ??
+      ''
+  ).trim();
+
+  if (!nameText && !/\$/.test(text)) return null;
+
+  const price = parsePrice(text);
+  const packageSize = parsePackageSize(text) ?? parsePackageSize(nameText);
+  const thc = parsePercentNearLabel(text, 'THC');
+  const cbd = parsePercentNearLabel(text, 'CBD');
+  const reviewCount = parseReviewCount(text);
+  const reviewRating = parseRating(cardHtml, text);
+  const terpene = parseTerpeneDescription(text);
+  const availability = parseAvailability(text);
+  const discount = parseDiscount(text);
+
+  const product: Product = {
+    sourceUrl: productUrl,
+    name: nameText ? present(nameText) : missing('Product name missing'),
+    price: price == null ? missing('Price missing or unreadable') : present(price),
+    packageSizeGrams: packageSize == null ? missing('Package size missing or unreadable') : present(packageSize),
+    pricePerGram:
+      price != null && packageSize != null && packageSize > 0
+        ? derived(round(price / packageSize), 'Calculated from listing price and package size')
+        : missing('Needs both price and package size'),
+    thcPercent: thc == null ? missing('THC percentage missing on listing card') : present(thc),
+    cbdPercent: cbd == null ? missing('CBD percentage missing on listing card') : present(cbd),
+    terpeneDescription: terpene ? present(terpene) : missing('Terpene/flavour notes missing on listing card'),
+    reviewCount: reviewCount == null ? missing('Review count missing') : present(reviewCount),
+    reviewRating: reviewRating == null ? missing('Review rating missing') : present(reviewRating),
+    availability,
+    discountDetails: discount ? present(discount) : missing('No discount details detected'),
+    missingFields: [],
+    unreliableFields: []
+  };
+
+  product.missingFields = Object.entries(product)
+    .filter(([, value]) => isField(value) && value.status === 'missing')
+    .map(([key]) => key);
+  product.unreliableFields = Object.entries(product)
+    .filter(([, value]) => isField(value) && value.status === 'unreliable')
+    .map(([key]) => key);
+
+  return product;
+}
+
+function splitProductCards(html: string): string[] {
+  const matches = html.match(/<li[^>]+class=["'][^"']*(?:product|type-product)[^"']*["'][\s\S]*?<\/li>/gi);
+  if (matches?.length) return matches;
+  return html.match(/<div[^>]+class=["'][^"']*(?:product|type-product)[^"']*["'][\s\S]*?<\/div>/gi) ?? [];
+}
+
+function parsePrice(input: string): number | null {
+  const text = stripTags(input);
+  const matches = [...text.matchAll(/\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/g)];
+  if (!matches.length) return null;
+  return Number(matches[matches.length - 1][1].replace(/,/g, ''));
+}
+
+function parsePackageSize(input: string): number | null {
+  const ounce = input.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:oz|ounce)/i);
+  if (ounce) return round(Number(ounce[1]) * 28.3495);
+  const grams = input.match(/([0-9]+(?:\.[0-9]+)?)\s*g(?:ram)?s?\b/i);
+  return grams ? Number(grams[1]) : null;
+}
+
+function parsePercentNearLabel(input: string, label: 'THC' | 'CBD'): number | null {
+  const after = input.match(new RegExp(`${label}[^0-9]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*%`, 'i'));
+  const before = input.match(new RegExp(`([0-9]+(?:\\.[0-9]+)?)\\s*%[^A-Za-z0-9]{0,12}${label}`, 'i'));
+  const parsed = Number(after?.[1] ?? before?.[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseReviewCount(input: string): number | null {
+  const match = input.match(/([0-9]+)\s*(?:customer\s*)?reviews?/i);
+  return match ? Number(match[1]) : null;
+}
+
+function parseRating(cardHtml: string, input: string): number | null {
+  const source = `${firstMatch(cardHtml, /aria-label=["']([^"']*Rated[^"']*)["']/i) ?? ''} ${input}`;
+  const match = source.match(/Rated\s+([0-9.]+)\s+out of 5/i) ?? source.match(/([0-9.]+)\s*\/\s*5/);
+  return match ? Number(match[1]) : null;
+}
+
+function parseTerpeneDescription(input: string): string | null {
+  const match = input.match(/(?:terpene|flavou?r|aroma|taste)s?:?\s*([^.|]{8,140})/i);
+  return match ? normalize(match[1]) : null;
+}
+
+function parseAvailability(input: string): FieldMarker<string> {
+  if (/out of stock|sold out|unavailable/i.test(input)) return unavailable('Listing indicates out of stock or unavailable');
+  if (/in stock|add to cart|select options/i.test(input)) return present('Available or selectable on listing');
+  return missing('Availability not explicit on listing card');
+}
+
+function parseDiscount(input: string): string | null {
+  const match = input.match(/(?:sale|save|discount|off)\s*[^.]{0,80}/i);
+  return match ? normalize(match[0]) : null;
+}
+
+function firstMatch(input: string, regex: RegExp): string | null {
+  return input.match(regex)?.[1] ?? null;
+}
+
+function stripTags(value: string): string {
+  return decodeEntities(value.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' '));
+}
+
+function decodeEntities(value: string): string {
+  return value.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#36;/g, '$').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+}
+
+function absolutize(url: string | null, base: string): string {
+  if (!url) return base;
+  try { return new URL(url, base).toString(); } catch { return base; }
+}
+
+function normalize(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isField(value: unknown): value is FieldMarker<unknown> {
+  return Boolean(value && typeof value === 'object' && 'status' in value && 'value' in value);
+}
