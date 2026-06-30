@@ -1,60 +1,125 @@
-# CannabisShopper
+# Compa Cana / CannabisShopper
 
-CannabisShopper is a research-focused cannabis flower comparison tool for legal adult-use cannabis research in Canada. It collects public listing signals from Bulk Buddy's craft cannabis flower category and ranks products for further consideration without directing purchase or making medical/safety claims.
+Compa Cana is a craft cannabis flower ranking tool for legal adult-use cannabis research in Canada. It focuses on Bulk Buddy's craft cannabis flower category, filters out non-flower products, ranks the remaining craft flower listings, and can email the report.
 
-## What it compares
+## What it does
 
-The TypeScript app extracts and normalizes product listing fields when available:
+- Fetches the craft cannabis flower category.
+- Filters to craft flower only.
+- Excludes kief, hash, edibles, pre-rolls, vapes, extracts, CBD candy, and unrelated products.
+- Ranks craft flower using visible listing signals:
+  - product name
+  - strain type
+  - starting price
+  - review rating
+  - review volume
+  - availability signal
+- Ignores sitewide bulk discount banners.
+- Uses the decision rule: prefer 3 oz variety unless a single quarter-pound strain is at least 12-15% cheaper per gram than the best 3 oz variety basket after the 35% bulk discount.
+- Emails the report when SMTP settings are configured.
 
-- product name
-- price
-- package size
-- calculated price per gram
-- THC percentage
-- CBD percentage
-- terpene/flavour description
-- review count
-- review quality/rating
-- availability
-- discount details
-- missing/unreliable field markers
+This is a research/comparison tool only. It does not make medical, safety, or purchase claims.
 
-## Scoring rubric
+## CLI usage in Termux / Node
 
-Scores are out of 100 using this weighted rubric:
+Install dependencies:
 
-- THC/CBD risk balance: 25%
-- Price/value: 20%
-- Product transparency: 15%
-- Review quality and volume: 15%
-- Flavour/terpene preference match: 15%
-- Previous user satisfaction/order history match: 10%
+```bash
+npm install
+```
 
-Incomplete listings are intentionally capped in the affected scoring areas so products are not over-scored when THC/CBD, review, price, or package-size data is missing.
-
-## Usage
+Build:
 
 ```bash
 npm run build
-node dist/index.js
 ```
 
-If the live website is unavailable from your environment, save the page HTML and run the parser offline:
+Run and email automatically:
+
+```bash
+npm start
+```
+
+Run without email:
+
+```bash
+npm run report
+```
+
+Run with saved offline HTML:
 
 ```bash
 node dist/index.js --html-file ./bulkbuddy-craft-flowers.html
 ```
 
-## Output
+## Email setup for CLI
 
-The CLI prints a Markdown report with:
+Use a Gmail App Password, not your normal Gmail password.
 
-- batch date
-- source URL
-- clean product comparison table
-- up to three best overall products for further consideration
-- concise reasons and watch-outs for each shortlisted product
-- better-value discount notes when discount text is detected
-- order-history update template
+```bash
+export SMTP_HOST="smtp.gmail.com"
+export SMTP_PORT="465"
+export SMTP_USER="lapeuffe@gmail.com"
+export SMTP_PASS="your_16_character_google_app_password"
+export EMAIL_FROM="lapeuffe@gmail.com"
+export EMAIL_TO="lapeuffe@gmail.com"
+```
 
-The tone is intentionally casual, concise, and analytical — “worth-a-look” style — while staying within legal adult-use Canada research context.
+Then run:
+
+```bash
+npm start
+```
+
+Never commit SMTP passwords, Gmail App Passwords, API keys, or `.env` files.
+
+## Android APK
+
+This repo now contains a native Android app in `app/`.
+
+The APK app:
+
+- fetches the craft flower category directly from the phone
+- filters to craft flower only
+- shows a readable ranked report in the app
+- emails the report automatically after ranking if SMTP settings are saved
+- stores SMTP settings in Android private app preferences
+
+### Build APK with GitHub Actions
+
+A workflow is included at:
+
+```text
+.github/workflows/android-apk.yml
+```
+
+To build the APK:
+
+1. Open the repo on GitHub.
+2. Go to **Actions**.
+3. Open **Build Android APK**.
+4. Click **Run workflow**.
+5. Download the artifact named **compa-cana-debug-apk**.
+6. Inside it, install `app-debug.apk` on your Android phone.
+
+### Build APK locally with Gradle
+
+If Android SDK and Gradle are installed:
+
+```bash
+gradle :app:assembleDebug
+```
+
+The APK will be created at:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+## Gmail note
+
+Gmail SMTP requires a Google App Password for this kind of script/app. Your normal Gmail password will fail with `535-5.7.8 Username and Password not accepted`.
+
+## Privacy note
+
+The Android app stores SMTP settings in the app's private preferences. For stronger security, create a dedicated Gmail App Password for Compa Cana and revoke it if the phone is lost or the app is no longer used.
