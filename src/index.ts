@@ -1,6 +1,7 @@
 import { formatRecommendation, buildRecommendationResult } from './output.js';
 import { scoreProducts } from './scoring.js';
 import { parseProducts, scrapeProducts } from './scraper.js';
+import { emailReport } from './email.js';
 import { readFile } from 'node:fs/promises';
 import { OrderHistoryEntry, UserPreferences } from './types.js';
 
@@ -20,6 +21,7 @@ export async function runComparison(htmlFile?: string): Promise<string> {
   const products = htmlFile
     ? parseProducts(await readFile(htmlFile, 'utf8'), SOURCE_URL)
     : await scrapeProducts(SOURCE_URL);
+
   const scores = scoreProducts(products, defaultPreferences, defaultHistory);
   return formatRecommendation(buildRecommendationResult(SOURCE_URL, products, scores));
 }
@@ -29,9 +31,19 @@ function readArg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+function shouldEmail(): boolean {
+  return process.argv.includes('--email') || process.env.EMAIL_AUTOSEND === 'true';
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   runComparison(readArg('--html-file'))
-    .then((output) => console.log(output))
+    .then(async (output) => {
+      console.log(output);
+
+      if (shouldEmail()) {
+        await emailReport(output);
+      }
+    })
     .catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : error);
       process.exitCode = 1;
