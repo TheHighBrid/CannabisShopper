@@ -17,7 +17,7 @@ concurrency:
 jobs:
   validate-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -84,16 +84,16 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp app/build/outputs/apk/release/app-release.apk CanShop-v1.01.apk
-          sha256sum CanShop-v1.01.apk | tee CanShop-v1.01.apk.sha256
+          cp app/build/outputs/apk/release/app-release.apk CanShop-v1.02.apk
+          sha256sum CanShop-v1.02.apk | tee CanShop-v1.02.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CanShop-v1.01
+          name: CanShop-v1.02
           path: |
-            CanShop-v1.01.apk
-            CanShop-v1.01.apk.sha256
+            CanShop-v1.02.apk
+            CanShop-v1.02.apk.sha256
           if-no-files-found: error
 
       - name: Publish or refresh GitHub release
@@ -101,13 +101,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.0.1 >/dev/null 2>&1; then
-            gh release upload v1.0.1 CanShop-v1.01.apk CanShop-v1.01.apk.sha256 --clobber
-            gh release edit v1.0.1 --title "CanShop v1.01" --notes-file docs/RELEASE_NOTES_v1.01.md --latest
+          if gh release view v1.0.2 >/dev/null 2>&1; then
+            gh release upload v1.0.2 CanShop-v1.02.apk CanShop-v1.02.apk.sha256 --clobber
+            gh release edit v1.0.2 --title "CanShop v1.02" --notes-file docs/RELEASE_NOTES_v1.02.md --latest
           else
-            gh release create v1.0.1 CanShop-v1.01.apk CanShop-v1.01.apk.sha256 \
+            gh release create v1.0.2 CanShop-v1.02.apk CanShop-v1.02.apk.sha256 \
               --target "$GITHUB_SHA" \
-              --title "CanShop v1.01" \
-              --notes-file docs/RELEASE_NOTES_v1.01.md \
+              --title "CanShop v1.02" \
+              --notes-file docs/RELEASE_NOTES_v1.02.md \
               --latest
           fi
