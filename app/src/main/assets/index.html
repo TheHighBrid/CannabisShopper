@@ -21,29 +21,29 @@
   <header class="topbar">
     <div>
       <p class="eyebrow">CRAFT FLOWER RESEARCH</p>
-      <h1>CanShop <span>v1.00</span></h1>
+      <h1>CanShop <span>v1.01</span></h1>
     </div>
-    <button id="refreshButton" class="icon-button" aria-label="Refresh live craft flower listing">↻</button>
+    <button id="refreshButton" class="icon-button" aria-label="Fetch current Bulk Buddy craft strains">↻</button>
   </header>
 
   <main>
     <section class="hero panel">
       <div>
-        <p class="kicker">COMPARE THE SIGNALS, NOT THE HYPE</p>
-        <h2>A cleaner lens for craft flower.</h2>
-        <p>Rank legal adult-use craft flower using price per gram, listing transparency, review strength, terpene fit, and your own history.</p>
+        <p class="kicker">ONE TAP, EVERY CURRENT STRAIN</p>
+        <h2>Let the product pages fill the notebook.</h2>
+        <p>CanShop finds the current Bulk Buddy craft strains, follows each product link, and extracts the strain name, type, rating, review count, flavour, THC, CBD, batch date, one-ounce price, quarter-pound price, and availability.</p>
       </div>
       <div class="hero-actions">
-        <button id="loadSample" class="secondary">Load sample set</button>
-        <button id="addProductButton" class="primary">Add product</button>
+        <button id="fetchButton" class="primary">Fetch Bulk Buddy strains</button>
+        <button id="addProductButton" class="secondary">Manual fallback</button>
       </div>
-      <p id="status" class="status" aria-live="polite">Ready. Add products or refresh the public craft-flower category.</p>
+      <p id="status" class="status" aria-live="polite">Ready. Tap fetch to rebuild the list from the current Bulk Buddy product pages.</p>
     </section>
 
     <section class="metrics" aria-label="Comparison summary">
-      <article><span id="metricCount">0</span><small>flower options</small></article>
+      <article><span id="metricCount">0</span><small>available strains</small></article>
       <article><span id="metricBest">—</span><small>top research score</small></article>
-      <article><span id="metricValue">—</span><small>best listed $/g</small></article>
+      <article><span id="metricValue">—</span><small>best selected $/g</small></article>
     </section>
 
     <section class="panel settings-panel">
@@ -55,73 +55,93 @@
         <button id="toggleSettings" class="text-button" aria-expanded="false">Edit</button>
       </div>
       <form id="settingsForm" class="settings-grid" hidden>
-        <label>Target THC %<input id="targetThc" type="number" inputmode="decimal" min="0" max="45" step="0.1" value="24"></label>
+        <label>Ranking package
+          <select id="comparisonPackage">
+            <option value="quarterPound">Quarter Pound</option>
+            <option value="ounce">1 Ounce</option>
+          </select>
+        </label>
+        <label>Target THC %<input id="targetThc" type="number" inputmode="decimal" min="0" max="45" step="0.1" value="27"></label>
         <label>Maximum $/g<input id="maxPricePerGram" type="number" inputmode="decimal" min="0" step="0.01" value="8"></label>
-        <label class="wide">Preferred terpene or flavour words<input id="preferredFlavours" type="text" value="citrus, gas, pine, berry" placeholder="citrus, gas, pine"></label>
-        <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked> Show available listings only</label>
+        <label class="wide">Preferred flavour words<input id="preferredFlavours" type="text" value="citrus, gas, pine, berry, diesel" placeholder="citrus, gas, pine"></label>
+        <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked> Show only product pages with an available purchase signal</label>
         <button class="primary wide" type="submit">Apply preferences</button>
       </form>
-      <p class="policy-note">Discount badges are ignored. Non-flower formats such as hash, kief, pre-rolls, edibles, vapes, extracts, concentrates, and CBD candy are excluded.</p>
+      <p class="policy-note">The crawler starts from the craft search page, follows the individual strain links, and skips out-of-stock pages. Non-flower formats such as hash, kief, pre-rolls, edibles, vapes, extracts, concentrates, shake, and trim are excluded.</p>
     </section>
 
     <section class="section-heading results-heading">
       <div>
-        <p class="eyebrow">RANKED RESEARCH SHORTLIST</p>
-        <h2>Craft flower comparison</h2>
+        <p class="eyebrow">LIVE PRODUCT-PAGE EXTRACTION</p>
+        <h2>Available craft strains</h2>
       </div>
       <button id="clearButton" class="text-button">Clear</button>
     </section>
 
     <section id="emptyState" class="empty panel">
       <div class="empty-mark">C</div>
-      <h3>No products in the notebook yet.</h3>
-      <p>Refresh the live category, load the clearly labelled sample set, or enter a product manually.</p>
+      <h3>No fetched strains yet.</h3>
+      <p>Tap “Fetch Bulk Buddy strains.” CanShop will discover the current product links and read each strain page automatically.</p>
     </section>
 
     <section id="results" class="results" aria-live="polite"></section>
 
     <section class="panel method">
-      <p class="eyebrow">METHOD</p>
-      <h2>How CanShop scores</h2>
+      <p class="eyebrow">EXTRACTED FIELDS</p>
+      <h2>Only the useful product-page information</h2>
       <div class="method-grid">
-        <div><strong>30%</strong><span>Price and package value</span></div>
-        <div><strong>25%</strong><span>Listing transparency</span></div>
-        <div><strong>20%</strong><span>Review quality and volume</span></div>
-        <div><strong>15%</strong><span>Terpene preference match</span></div>
-        <div><strong>10%</strong><span>Cannabinoid profile completeness</span></div>
+        <div><strong>Name</strong><span>Full strain and craft title</span></div>
+        <div><strong>Type</strong><span>Indica, sativa, or hybrid</span></div>
+        <div><strong>Rating</strong><span>Average score and rating count</span></div>
+        <div><strong>Flavour</strong><span>The listed flavour profile</span></div>
+        <div><strong>Potency</strong><span>THC range and CBD listing</span></div>
+        <div><strong>Batch</strong><span>Current batch date</span></div>
+        <div><strong>1 Ounce</strong><span>Exact variation price and $/g</span></div>
+        <div><strong>Quarter Pound</strong><span>Exact variation price and $/g</span></div>
       </div>
-      <p class="policy-note">Three-ounce variety bundles are preferred over a single-strain quarter pound unless the quarter pound is at least 15% cheaper per gram with comparable listing transparency.</p>
+      <p class="policy-note">Bulk Buddy can change its HTML or variation data at any time. CanShop shows “Not found” rather than inventing a missing value.</p>
     </section>
   </main>
 
   <dialog id="productDialog">
     <form id="productForm" method="dialog">
       <div class="dialog-head">
-        <div><p class="eyebrow">MANUAL ENTRY</p><h2>Add craft flower</h2></div>
+        <div><p class="eyebrow">MANUAL FALLBACK</p><h2>Add one strain</h2></div>
         <button type="button" id="closeDialog" class="icon-button" aria-label="Close">×</button>
       </div>
-      <label>Product name<input id="productName" required maxlength="100"></label>
+      <label>Product name<input id="productName" required maxlength="120"></label>
       <div class="form-row">
-        <label>Price (CAD)<input id="productPrice" required type="number" inputmode="decimal" min="0" step="0.01"></label>
-        <label>Package grams<input id="productGrams" required type="number" inputmode="decimal" min="0.1" step="0.01"></label>
+        <label>Strain type
+          <select id="productType">
+            <option>Indica</option>
+            <option>Sativa</option>
+            <option>Hybrid</option>
+            <option>Unknown</option>
+          </select>
+        </label>
+        <label>Batch date<input id="productBatch" placeholder="July 24, 2026"></label>
       </div>
       <div class="form-row">
-        <label>THC %<input id="productThc" type="number" inputmode="decimal" min="0" max="45" step="0.1"></label>
-        <label>CBD %<input id="productCbd" type="number" inputmode="decimal" min="0" max="45" step="0.1"></label>
+        <label>1 Ounce price (CAD)<input id="productOneOuncePrice" type="number" inputmode="decimal" min="0" step="0.01"></label>
+        <label>Quarter Pound price (CAD)<input id="productQuarterPoundPrice" type="number" inputmode="decimal" min="0" step="0.01"></label>
       </div>
       <div class="form-row">
-        <label>Rating / 5<input id="productRating" type="number" inputmode="decimal" min="0" max="5" step="0.1"></label>
-        <label>Review count<input id="productReviews" type="number" inputmode="numeric" min="0" step="1"></label>
+        <label>THC minimum %<input id="productThcMin" type="number" inputmode="decimal" min="0" max="45" step="0.1"></label>
+        <label>THC maximum %<input id="productThcMax" type="number" inputmode="decimal" min="0" max="45" step="0.1"></label>
       </div>
-      <label>Terpene / flavour notes<input id="productTerpenes" maxlength="180" placeholder="citrus, fuel, pine"></label>
-      <label class="checkbox"><input id="productAvailable" type="checkbox" checked> Listing appears available</label>
-      <label class="checkbox"><input id="productVariety" type="checkbox"> Three-ounce variety bundle</label>
-      <button class="primary" type="submit">Add to comparison</button>
+      <div class="form-row">
+        <label>CBD listing<input id="productCbd" placeholder=">1%"></label>
+        <label>Rating / 5<input id="productRating" type="number" inputmode="decimal" min="0" max="5" step="0.01"></label>
+      </div>
+      <label>Rating count<input id="productReviews" type="number" inputmode="numeric" min="0" step="1"></label>
+      <label>Flavour profile<input id="productTerpenes" maxlength="240" placeholder="Berry / Diesel / Earthy / Floral / Gas"></label>
+      <label class="checkbox"><input id="productAvailable" type="checkbox" checked> Product page appears available</label>
+      <button class="primary" type="submit">Add fallback entry</button>
     </form>
   </dialog>
 
   <footer>
-    <p>CanShop is an independent research notebook. Verify freshness, legality, lab information, availability, and local rules yourself.</p>
+    <p>CanShop is an independent research notebook. Verify prices, freshness, legality, lab information, availability, and local rules yourself.</p>
   </footer>
 
   <script src="app.js"></script>
