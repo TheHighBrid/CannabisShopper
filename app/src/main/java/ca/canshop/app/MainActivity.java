@@ -175,6 +175,7 @@ public final class MainActivity extends Activity {
 
             String html = readResponse(connection.getInputStream());
             String resolvedUrl = connection.getURL().toString();
+            validateBulkBuddyUrl(resolvedUrl);
             return new PageResponse(resolvedUrl, html);
         } finally {
             if (connection != null) connection.disconnect();
@@ -185,9 +186,19 @@ public final class MainActivity extends Activity {
         Map<String, List<String>> headers = httpCookieManager.get(uri, Collections.emptyMap());
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
             if ("Cookie".equalsIgnoreCase(entry.getKey())) {
-                connection.setRequestProperty("Cookie", String.join("; ", entry.getValue()));
+                connection.setRequestProperty("Cookie", joinHeaderValues(entry.getValue()));
             }
         }
+    }
+
+    private String joinHeaderValues(List<String> values) {
+        StringBuilder joined = new StringBuilder();
+        for (String value : values) {
+            if (value == null || value.isEmpty()) continue;
+            if (joined.length() > 0) joined.append("; ");
+            joined.append(value);
+        }
+        return joined.toString();
     }
 
     private void storeCookies(HttpURLConnection connection) {
