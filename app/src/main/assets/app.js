@@ -1,21 +1,34 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'canshop.products.v2';
-  const PREFS_KEY = 'canshop.preferences.v2';
+  const STORAGE_KEY = 'canshop.products.v3';
+  const LEGACY_STORAGE_KEYS = ['canshop.products.v2', 'canshop.products.v1'];
+  const PREFS_KEY = 'canshop.preferences.v3';
+  const LEGACY_PREFS_KEYS = ['canshop.preferences.v2', 'canshop.preferences.v1'];
   const AGE_KEY = 'canshop.legalAgeConfirmed.v1';
-  const SEARCH_URL = 'https://www.bulkbuddy.co/?term=craft-cannabis-flowers&s=&post_type=product&taxonomy=product_cat';
-  const CATEGORY_FALLBACK_URL = 'https://www.bulkbuddy.co/product-category/cannabis/craft-cannabis-flowers/';
+
+  const ORIGIN = 'https://www.bulkbuddy.co';
+  const SEARCH_URL = `${ORIGIN}/?term=craft-cannabis-flowers&s=&post_type=product&taxonomy=product_cat`;
+  const CRAFT_CATEGORY_URL = `${ORIGIN}/product-category/cannabis/craft-cannabis-flowers/?shop_view=list_view&per_page=200`;
+  const DISCOVERY_SEEDS = [
+    SEARCH_URL,
+    CRAFT_CATEGORY_URL,
+    `${ORIGIN}/product-category/cannabis/?shop_view=list_view&per_page=200`,
+    `${ORIGIN}/product-category/cannabis/aaaa/?shop_view=list_view&per_page=200`,
+    `${ORIGIN}/product-category/cannabis/indica/?shop_view=list_view&per_page=200`,
+    `${ORIGIN}/product-category/cannabis/hybrid/?shop_view=list_view&per_page=200`,
+    `${ORIGIN}/product-category/cannabis/sativa/?shop_view=list_view&per_page=200`,
+    `${ORIGIN}/`
+  ];
+
   const EXCLUDED_TERMS = [
     'kief', 'hash', 'pre-roll', 'preroll', 'edible', 'gummy', 'vape', 'cartridge',
     'extract', 'concentrate', 'shatter', 'rosin', 'resin', 'cbd candy', 'shake', 'trim'
   ];
-  const PACKAGE_GRAMS = {
-    ounce: 28.3495,
-    quarterPound: 113.398
-  };
-  const MAX_DISCOVERY_PAGES = 8;
-  const MAX_PRODUCT_PAGES = 80;
+  const PACKAGE_GRAMS = { ounce: 28.3495, quarterPound: 113.398 };
+  const MAX_DISCOVERY_PAGES = 28;
+  const MAX_PRODUCT_PAGES = 180;
+  const REQUEST_ATTEMPTS = 3;
   const pendingRequests = new Map();
 
   const els = {
@@ -56,23 +69,41 @@
     productAvailable: document.querySelector('#productAvailable')
   };
 
-  let products = readJson(STORAGE_KEY, []);
-  let preferences = readJson(PREFS_KEY, {
+  const defaultPreferences = {
     targetThc: 27,
     maxPricePerGram: 8,
     preferredFlavours: ['citrus', 'gas', 'pine', 'berry', 'diesel'],
     availableOnly: true,
     comparisonPackage: 'quarterPound'
-  });
+  };
+
+  let products = readWithMigration(STORAGE_KEY, LEGACY_STORAGE_KEYS, []);
+  let preferences = {
+    ...defaultPreferences,
+    ...readWithMigration(PREFS_KEY, LEGACY_PREFS_KEYS, defaultPreferences)
+  };
   let isFetching = false;
 
   function readJson(key, fallback) {
     try {
-      const value = localStorage.getItem(key);
-      return value ? JSON.parse(value) : fallback;
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
     } catch {
       return fallback;
     }
+  }
+
+  function readWithMigration(key, legacyKeys, fallback) {
+    const current = readJson(key, null);
+    if (current != null) return current;
+    for (const legacyKey of legacyKeys) {
+      const legacy = readJson(legacyKey, null);
+      if (legacy != null) {
+        localStorage.setItem(key, JSON.stringify(legacy));
+        return legacy;
+      }
+    }
+    return fallback;
   }
 
   function writeState() {
@@ -93,6 +124,10 @@
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function sleep(milliseconds) {
+    return new Promise(resolve => window.setTimeout(resolve, milliseconds));
   }
 
   function normalizeText(value) {
@@ -117,7 +152,7 @@
     isFetching = value;
     els.refreshButton.disabled = value;
     els.fetchButton.disabled = value;
-    els.fetchButton.textContent = value ? 'Fetching strain pages…' : 'Fetch Bulk Buddy strains';
+    els.fetchButton.textContent = value ? 'Fetching every strain…' : 'Fetch Bulk Buddy strains';
   }
 
   function average(min, max) {
@@ -127,16 +162,22 @@
     return round((min + max) / 2, 2);
   }
 
+  function formatRange(min, max, suffix = '') {
+    if (min == null && max == null) return '';
+    if (min == null || max == null || min === max) return `${min ?? max}${suffix}`;
+    return `${min} – ${max}${suffix}`;
+  }
+
   function normalizeProduct(input) {
     const oneOuncePrice = numberOrNull(input.oneOuncePrice ?? input.price);
     const quarterPoundPrice = numberOrNull(input.quarterPoundPrice);
     const thcMin = numberOrNull(input.thcMin ?? input.thc);
     const thcMax = numberOrNull(input.thcMax ?? input.thc);
-    const comparisonPackage = preferences.comparisonPackage === 'ounce' ? 'ounce' : 'quarterPound';
-    const comparisonPrice = comparisonPackage === 'ounce'
+    const selectedPackage = preferences.comparisonPackage === 'ounce' ? 'ounce' : 'quarterPound';
+    const comparisonPrice = selectedPackage === 'ounce'
       ? oneOuncePrice
       : (quarterPoundPrice ?? oneOuncePrice);
-    const comparisonGrams = comparisonPackage === 'ounce' || quarterPoundPrice == null
+    const comparisonGrams = selectedPackage === 'ounce' || quarterPoundPrice == null
       ? PACKAGE_GRAMS.ounce
       : PACKAGE_GRAMS.quarterPound;
 
@@ -159,22 +200,16 @@
       comparisonPrice,
       comparisonGrams,
       pricePerGram: comparisonPrice != null ? round(comparisonPrice / comparisonGrams) : null,
-      available: input.available === true,
+      available: input.available !== false,
       source: input.source || 'manual',
       sourceUrl: input.sourceUrl || null,
       fetchedAt: input.fetchedAt || null
     };
   }
 
-  function formatRange(min, max, suffix = '') {
-    if (min == null && max == null) return '';
-    if (min == null || max == null || min === max) return `${min ?? max}${suffix}`;
-    return `${min} – ${max}${suffix}`;
-  }
-
   function isAllowedFlower(product) {
     const haystack = `${product.name} ${product.flavours}`.toLowerCase();
-    return !EXCLUDED_TERMS.some(term => haystack.includes(term));
+    return /craft/i.test(product.name) && !EXCLUDED_TERMS.some(term => haystack.includes(term));
   }
 
   function transparency(product) {
@@ -196,8 +231,8 @@
   function scoreProduct(product, range) {
     const reasons = [];
     const cautions = [];
-
     let valueScore = 0.25;
+
     if (product.pricePerGram != null && range.min != null && range.max != null) {
       valueScore = range.min === range.max
         ? 0.8
@@ -283,7 +318,11 @@
   function formatMoney(value) {
     return value == null
       ? 'Not found'
-      : new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 2 }).format(value);
+      : new Intl.NumberFormat('en-CA', {
+        style: 'currency',
+        currency: 'CAD',
+        maximumFractionDigits: 2
+      }).format(value);
   }
 
   function packagePriceHtml(label, price, grams) {
@@ -313,13 +352,15 @@
             <div class="rank">${index + 1}</div>
             <div class="result-name">
               <h3>${escapeHtml(item.name)}</h3>
-              <p>${escapeHtml(item.strainType)}${item.batch ? ` · Batch ${escapeHtml(item.batch)}` : ''}</p>
+              <p>${escapeHtml(item.strainType)} · ${item.available ? 'not marked sold out' : 'out of stock'}</p>
             </div>
             <div class="score">${item.score}<small>/100</small></div>
           </div>
           <div class="product-facts">
-            <div><span>Rating</span><strong>${item.rating == null ? 'Not found' : `${item.rating.toFixed(2)} / 5`}</strong><small>${item.reviews == null ? '' : `${item.reviews} ratings`}</small></div>
-            <div><span>THC</span><strong>${escapeHtml(item.thcDisplay || 'Not found')}</strong><small>CBD ${escapeHtml(item.cbdDisplay || 'Not found')}</small></div>
+            <div><span>Rating</span><strong>${item.rating == null ? 'Not found' : item.rating.toFixed(2)}</strong><small>${item.reviews == null ? 'count unavailable' : `${item.reviews} ratings`}</small></div>
+            <div><span>Potency</span><strong>${escapeHtml(item.thcDisplay || 'Not found')}</strong><small>CBD ${escapeHtml(item.cbdDisplay || 'Not found')}</small></div>
+            <div><span>Batch</span><strong>${escapeHtml(item.batch || 'Not found')}</strong><small>page listing</small></div>
+            <div><span>Type</span><strong>${escapeHtml(item.strainType || 'Unknown')}</strong><small>title or category</small></div>
           </div>
           <p class="flavour-line"><strong>Flavour:</strong> ${escapeHtml(item.flavours || 'Not found')}</p>
           <div class="package-prices">
@@ -328,7 +369,7 @@
           </div>
           <p class="reason">${escapeHtml(explanation + warning)}</p>
           <div class="card-actions">
-            <span class="source-label">${item.source === 'bulkbuddy-product-page' ? 'Bulk Buddy product page' : escapeHtml(item.source)}</span>
+            <span class="source-label">${escapeHtml(item.source)}</span>
             <button class="remove" data-remove="${escapeHtml(item.id)}">Remove</button>
           </div>
         </article>`;
@@ -354,7 +395,7 @@
       const timeout = window.setTimeout(() => {
         pendingRequests.delete(requestId);
         reject(new Error('The website request timed out.'));
-      }, 35_000);
+      }, 55_000);
       pendingRequests.set(requestId, {
         resolve(payload) {
           window.clearTimeout(timeout);
@@ -369,6 +410,19 @@
     });
   }
 
+  async function requestWithRetry(url, attempts = REQUEST_ATTEMPTS) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await requestBulkBuddyPage(url);
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts) await sleep(650 * attempt);
+      }
+    }
+    throw lastError || new Error('Unable to fetch the page.');
+  }
+
   function isBulkBuddyProductUrl(url) {
     try {
       const parsed = new URL(url);
@@ -379,35 +433,53 @@
     }
   }
 
+  function canonicalUrl(value) {
+    const url = new URL(value);
+    url.hash = '';
+    ['add-to-cart', 'orderby', 'paged'].forEach(key => url.searchParams.delete(key));
+    return url.href;
+  }
+
+  function isDiscoveryPageUrl(value) {
+    try {
+      const url = new URL(value);
+      if (!['bulkbuddy.co', 'www.bulkbuddy.co'].includes(url.hostname.toLowerCase())) return false;
+      const path = url.pathname.toLowerCase();
+      const category = path.startsWith('/product-category/cannabis');
+      const home = path === '/';
+      const search = home && url.searchParams.get('post_type') === 'product';
+      return category || home || search;
+    } catch {
+      return false;
+    }
+  }
+
   function discoverLinks(html, baseUrl) {
     const documentFromHtml = new DOMParser().parseFromString(html, 'text/html');
     const productLinks = new Set();
     const paginationLinks = new Set();
-    const productSelectors = [
-      'ul.products li.product a[href*="/product/"]',
-      '.products .type-product a[href*="/product/"]',
-      '.product-grid-item a[href*="/product/"]',
-      'article.product a[href*="/product/"]'
-    ];
-    let anchors = [...documentFromHtml.querySelectorAll(productSelectors.join(','))];
-    if (!anchors.length) anchors = [...documentFromHtml.querySelectorAll('a[href*="/product/"]')];
+    const anchors = [...documentFromHtml.querySelectorAll('a[href*="/product/"]')];
 
     for (const anchor of anchors) {
       try {
         const url = new URL(anchor.getAttribute('href'), baseUrl);
         url.hash = '';
-        if (isBulkBuddyProductUrl(url.href)) productLinks.add(url.href);
+        if (!isBulkBuddyProductUrl(url.href)) continue;
+        const card = anchor.closest('li.product, .type-product, article.product, .product-grid-item, .product-wrapper');
+        const context = normalizeText(`${anchor.textContent || ''} ${card?.textContent || ''} ${url.pathname}`);
+        if (/\bcraft\b/i.test(context)) productLinks.add(canonicalUrl(url.href));
       } catch {
         // Ignore malformed links.
       }
     }
 
-    for (const anchor of documentFromHtml.querySelectorAll('.woocommerce-pagination a[href], a.next.page-numbers[href]')) {
+    const pageAnchors = documentFromHtml.querySelectorAll(
+      '.woocommerce-pagination a[href], a.page-numbers[href], a.next[href], .pagination a[href]'
+    );
+    for (const anchor of pageAnchors) {
       try {
         const url = new URL(anchor.getAttribute('href'), baseUrl);
-        const isCraftSearch = url.searchParams.get('term') === 'craft-cannabis-flowers';
-        const isCraftCategory = url.pathname.includes('/product-category/cannabis/craft-cannabis-flowers');
-        if (isCraftSearch || isCraftCategory) paginationLinks.add(url.href);
+        if (isDiscoveryPageUrl(url.href)) paginationLinks.add(canonicalUrl(url.href));
       } catch {
         // Ignore malformed links.
       }
@@ -457,41 +529,37 @@
       oneOunceRegularPrice: null,
       quarterPoundRegularPrice: null
     };
-    const forms = [...documentFromHtml.querySelectorAll('form.variations_form[data-product_variations]')];
     const variationArrays = [];
 
-    for (const form of forms) {
+    for (const form of documentFromHtml.querySelectorAll('form.variations_form[data-product_variations]')) {
       const raw = form.getAttribute('data-product_variations');
       if (!raw || raw === 'false') continue;
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) variationArrays.push(parsed);
-      } catch {
+      for (const candidate of [raw, decodeHtmlEntities(raw)]) {
         try {
-          const parsed = JSON.parse(decodeHtmlEntities(raw));
+          const parsed = JSON.parse(candidate);
           if (Array.isArray(parsed)) variationArrays.push(parsed);
+          break;
         } catch {
-          // Continue to raw-source fallbacks.
+          // Try the decoded candidate.
         }
       }
     }
 
-    const rawAttributeMatches = [...html.matchAll(/data-product_variations=(?:"([^"]+)"|'([^']+)')/gi)];
-    for (const match of rawAttributeMatches) {
+    for (const match of html.matchAll(/data-product_variations=(?:"([^"]+)"|'([^']+)')/gi)) {
       try {
         const parsed = JSON.parse(decodeHtmlEntities(match[1] || match[2] || ''));
         if (Array.isArray(parsed)) variationArrays.push(parsed);
       } catch {
-        // Ignore malformed variation payloads.
+        // Ignore malformed payloads.
       }
     }
 
     for (const variations of variationArrays) {
       for (const variation of variations) {
-        if (variation && variation.is_in_stock === false) continue;
-        const label = normalizeVariationLabel(Object.values(variation?.attributes || {}).join(' '));
-        const current = numberOrNull(variation?.display_price ?? variation?.price);
-        const regular = numberOrNull(variation?.display_regular_price ?? variation?.regular_price);
+        if (!variation || variation.is_in_stock === false || variation.is_purchasable === false) continue;
+        const label = normalizeVariationLabel(Object.values(variation.attributes || {}).join(' '));
+        const current = numberOrNull(variation.display_price ?? variation.price);
+        const regular = numberOrNull(variation.display_regular_price ?? variation.regular_price);
         if (variationMatches(label, 'ounce')) {
           result.oneOuncePrice = current ?? result.oneOuncePrice;
           result.oneOunceRegularPrice = regular ?? result.oneOunceRegularPrice;
@@ -504,8 +572,7 @@
     }
 
     const decodedHtml = decodeHtmlEntities(html);
-    const objectMatches = [...decodedHtml.matchAll(/\{[^{}]{0,1200}"display_price"\s*:\s*([0-9.]+)[^{}]{0,1200}"attributes"\s*:\s*\{([^{}]+)\}[^{}]{0,400}\}/gi)];
-    for (const match of objectMatches) {
+    for (const match of decodedHtml.matchAll(/\{[^{}]{0,1600}"display_price"\s*:\s*([0-9.]+)[^{}]{0,1600}"attributes"\s*:\s*\{([^{}]+)\}[^{}]{0,600}\}/gi)) {
       const label = normalizeVariationLabel(match[2]);
       const price = numberOrNull(match[1]);
       if (variationMatches(label, 'ounce') && result.oneOuncePrice == null) result.oneOuncePrice = price;
@@ -528,15 +595,13 @@
       documentFromHtml.querySelector('.posted_in, .product_meta')?.textContent || ''
     );
 
-    if (!name || (!/craft/i.test(name) && !/Craft Cannabis Flowers/i.test(categoryText + bodyText))) return null;
+    if (!name) return null;
+    const craftSignal = /\bcraft\b/i.test(name) || /Craft Cannabis Flowers/i.test(categoryText);
+    if (!craftSignal) return null;
     if (EXCLUDED_TERMS.some(term => `${name} ${categoryText}`.toLowerCase().includes(term))) return null;
 
-    const unavailable = /currently out of stock|out of stock|sold out|unavailable/i.test(summaryText)
+    const explicitUnavailable = /currently out of stock|out of stock|sold out|unavailable/i.test(summaryText)
       || Boolean(documentFromHtml.querySelector('.stock.out-of-stock, .outofstock'));
-    const availableSignal = Boolean(
-      documentFromHtml.querySelector('form.cart, form.variations_form, .single_add_to_cart_button, .stock.in-stock')
-    );
-    const available = !unavailable && availableSignal;
 
     const ratingSource =
       documentFromHtml.querySelector('[itemprop="ratingValue"]')?.getAttribute('content')
@@ -563,10 +628,8 @@
       ? `${thcRange[1]} – ${thcRange[2]}${/\+\s*%/.test(thcRange[0]) ? '+' : ''}%`
       : (thcSingle ? `${thcSingle[1]}${/\+\s*%/.test(thcSingle[0]) ? '+' : ''}%` : '');
     const cbdDisplay = normalizeText(summaryText.match(/CBD\s*:\s*([<>≤≥]?\s*[0-9.]+\+?\s*%)/i)?.[1] || '');
-    const batch = normalizeText(summaryText.match(/Batch\s*:\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})/i)?.[1] || '');
-
-    const titleAndCategories = `${name} ${categoryText}`;
-    const strainType = normalizeText(titleAndCategories.match(/\b(Indica|Sativa|Hybrid)\b/i)?.[1] || 'Unknown');
+    const batch = normalizeText(summaryText.match(/Batch\s*:\s*([A-Za-z]+\s+\d{1,2}[,.]?\s+\d{4})/i)?.[1] || '');
+    const strainType = normalizeText(`${name} ${categoryText}`.match(/\b(Indica|Sativa|Hybrid)\b/i)?.[1] || 'Unknown');
     const prices = extractVariationPrices(documentFromHtml, html);
 
     return normalizeProduct({
@@ -581,7 +644,7 @@
       cbdDisplay,
       batch,
       ...prices,
-      available,
+      available: !explicitUnavailable,
       source: 'bulkbuddy-product-page',
       sourceUrl,
       fetchedAt: new Date().toISOString()
@@ -590,34 +653,37 @@
 
   async function discoverProductUrls() {
     const visitedPages = new Set();
+    const queuedPages = new Set(DISCOVERY_SEEDS.map(canonicalUrl));
+    const queue = [...queuedPages];
     const productUrls = new Set();
-    const queue = [SEARCH_URL];
-    let usedFallback = false;
+    let pageFailures = 0;
 
     while (queue.length && visitedPages.size < MAX_DISCOVERY_PAGES) {
       const pageUrl = queue.shift();
       if (!pageUrl || visitedPages.has(pageUrl)) continue;
       visitedPages.add(pageUrl);
-      setStatus(`Finding craft strains on Bulk Buddy… page ${visitedPages.size}`);
+      setStatus(`Scanning inventory sources ${visitedPages.size} of up to ${MAX_DISCOVERY_PAGES}… ${productUrls.size} craft links found.`);
 
       try {
-        const response = await requestBulkBuddyPage(pageUrl);
+        const response = await requestWithRetry(pageUrl, pageUrl === SEARCH_URL ? 1 : 2);
         const discovered = discoverLinks(response.html, response.url);
         discovered.productLinks.forEach(url => productUrls.add(url));
         discovered.paginationLinks.forEach(url => {
-          if (!visitedPages.has(url) && !queue.includes(url)) queue.push(url);
+          if (!visitedPages.has(url) && !queuedPages.has(url)) {
+            queuedPages.add(url);
+            queue.push(url);
+          }
         });
-      } catch (error) {
-        if (!usedFallback && pageUrl === SEARCH_URL) {
-          usedFallback = true;
-          queue.unshift(CATEGORY_FALLBACK_URL);
-          continue;
-        }
-        if (!productUrls.size) throw error;
+      } catch {
+        pageFailures += 1;
       }
     }
 
-    return [...productUrls].slice(0, MAX_PRODUCT_PAGES);
+    return {
+      urls: [...productUrls].slice(0, MAX_PRODUCT_PAGES),
+      visitedPages: visitedPages.size,
+      pageFailures
+    };
   }
 
   async function refreshCatalog() {
@@ -625,22 +691,26 @@
     setFetching(true);
 
     try {
-      const productUrls = await discoverProductUrls();
-      if (!productUrls.length) {
-        throw new Error('No product links were found on the craft-flower results pages.');
+      const discovery = await discoverProductUrls();
+      if (!discovery.urls.length) {
+        throw new Error('No craft product links were found across the craft, cannabis, type, and homepage inventory sources.');
       }
 
       const extracted = [];
       let skippedUnavailable = 0;
+      let skippedNonCraft = 0;
       let failed = 0;
 
-      for (let index = 0; index < productUrls.length; index += 1) {
-        const url = productUrls[index];
-        setStatus(`Extracting strain details ${index + 1} of ${productUrls.length}…`);
+      for (let index = 0; index < discovery.urls.length; index += 1) {
+        const url = discovery.urls[index];
+        setStatus(`Reading product page ${index + 1} of ${discovery.urls.length}… ${extracted.length} strains accepted.`);
         try {
-          const response = await requestBulkBuddyPage(url);
+          const response = await requestWithRetry(url);
           const product = parseProductPage(response.html, response.url);
-          if (!product) continue;
+          if (!product) {
+            skippedNonCraft += 1;
+            continue;
+          }
           if (!product.available) {
             skippedUnavailable += 1;
             continue;
@@ -649,19 +719,23 @@
         } catch {
           failed += 1;
         }
+        if ((index + 1) % 4 === 0) await sleep(250);
       }
 
-      if (!extracted.length) {
-        throw new Error('Product pages were found, but no currently available craft strains could be extracted.');
+      const uniqueProducts = [...new Map(extracted.map(product => [product.sourceUrl || product.name.toLowerCase(), product])).values()];
+      if (!uniqueProducts.length) {
+        throw new Error('Craft product pages were discovered, but none could be accepted after retries.');
       }
 
-      products = extracted;
+      products = uniqueProducts;
       writeState();
       render();
       setStatus(
-        `Fetched ${extracted.length} available craft strain${extracted.length === 1 ? '' : 's'} from individual product pages.` +
-        `${skippedUnavailable ? ` Skipped ${skippedUnavailable} unavailable.` : ''}` +
-        `${failed ? ` ${failed} page${failed === 1 ? '' : 's'} could not be read.` : ''}`
+        `Fetched ${uniqueProducts.length} available craft strain${uniqueProducts.length === 1 ? '' : 's'} from ${discovery.urls.length} candidate product pages across ${discovery.visitedPages} inventory pages.` +
+        `${skippedUnavailable ? ` Skipped ${skippedUnavailable} explicitly sold out.` : ''}` +
+        `${skippedNonCraft ? ` Filtered ${skippedNonCraft} non-craft pages.` : ''}` +
+        `${failed ? ` ${failed} page${failed === 1 ? '' : 's'} failed after retries.` : ''}` +
+        `${discovery.pageFailures ? ` ${discovery.pageFailures} inventory source${discovery.pageFailures === 1 ? '' : 's'} could not be read.` : ''}`
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to fetch Bulk Buddy strain information.', true);
@@ -688,7 +762,7 @@
   function hydratePreferences() {
     els.targetThc.value = preferences.targetThc ?? 27;
     els.maxPricePerGram.value = preferences.maxPricePerGram ?? 8;
-    els.preferredFlavours.value = preferences.preferredFlavours.join(', ');
+    els.preferredFlavours.value = (preferences.preferredFlavours || []).join(', ');
     els.availableOnly.checked = preferences.availableOnly !== false;
     els.comparisonPackage.value = preferences.comparisonPackage || 'quarterPound';
   }
@@ -697,25 +771,30 @@
     localStorage.setItem(AGE_KEY, 'true');
     els.ageGate.hidden = true;
   });
+
   els.declineAge.addEventListener('click', () => {
     document.body.innerHTML = '<main><section class="panel empty"><h2>CanShop closed</h2><p>This research tool is restricted to people of legal cannabis age in their province or territory.</p></section></main>';
   });
+
   els.refreshButton.addEventListener('click', refreshCatalog);
   els.fetchButton.addEventListener('click', refreshCatalog);
   els.addProductButton.addEventListener('click', () => els.productDialog.showModal());
   els.closeDialog.addEventListener('click', () => els.productDialog.close());
+
   els.clearButton.addEventListener('click', () => {
     products = [];
     writeState();
     render();
     setStatus('The local comparison notebook was cleared.');
   });
+
   els.toggleSettings.addEventListener('click', () => {
     const willOpen = els.settingsForm.hidden;
     els.settingsForm.hidden = !willOpen;
     els.toggleSettings.textContent = willOpen ? 'Close' : 'Edit';
     els.toggleSettings.setAttribute('aria-expanded', String(willOpen));
   });
+
   els.settingsForm.addEventListener('submit', event => {
     event.preventDefault();
     preferences = {
@@ -729,11 +808,13 @@
     render();
     setStatus('Research preferences applied.');
   });
+
   els.productForm.addEventListener('submit', event => {
     event.preventDefault();
     const candidate = normalizeProduct({
       name: els.productName.value,
       strainType: els.productType.value,
+      batch: els.productBatch.value,
       oneOuncePrice: els.productOneOuncePrice.value,
       quarterPoundPrice: els.productQuarterPoundPrice.value,
       thcMin: els.productThcMin.value,
@@ -742,12 +823,11 @@
       rating: els.productRating.value,
       reviews: els.productReviews.value,
       flavours: els.productTerpenes.value,
-      batch: els.productBatch.value,
       available: els.productAvailable.checked,
       source: 'manual-fallback'
     });
     if (!isAllowedFlower(candidate)) {
-      setStatus('That entry appears to be a non-flower cannabis format and was not added.', true);
+      setStatus('The manual entry must be a craft flower product and not an excluded format.', true);
       return;
     }
     products.push(candidate);
