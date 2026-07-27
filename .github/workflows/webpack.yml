@@ -26,13 +26,30 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: Validate TypeScript and web assets
+      - name: Install JavaScript dependencies
+        run: npm install
+
+      - name: Type-check CLI
+        shell: bash
         run: |
-          npm install
-          npm run check
-          npm run build
+          set -o pipefail
+          npm run test 2>&1 | tee tsc-errors.log
+
+      - name: Upload TypeScript diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canshop-typescript-diagnostics
+          path: tsc-errors.log
+          if-no-files-found: error
+
+      - name: Validate Android web application
+        run: npm run check:web
+
+      - name: Compile TypeScript CLI
+        run: npm run build
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -52,20 +69,31 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build signed sideload APK
-        run: gradle --no-daemon clean assembleRelease
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon clean assembleRelease 2>&1 | tee gradle-errors.log
+
+      - name: Upload Android build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canshop-android-diagnostics
+          path: gradle-errors.log
+          if-no-files-found: error
 
       - name: Prepare APK
         run: |
-          cp app/build/outputs/apk/release/app-release.apk CanShop-v1.00.apk
-          sha256sum CanShop-v1.00.apk | tee CanShop-v1.00.apk.sha256
+          cp app/build/outputs/apk/release/app-release.apk CanShop-v1.01.apk
+          sha256sum CanShop-v1.01.apk | tee CanShop-v1.01.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CanShop-v1.00
+          name: CanShop-v1.01
           path: |
-            CanShop-v1.00.apk
-            CanShop-v1.00.apk.sha256
+            CanShop-v1.01.apk
+            CanShop-v1.01.apk.sha256
           if-no-files-found: error
 
       - name: Publish or refresh GitHub release
@@ -73,13 +101,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.0.0 >/dev/null 2>&1; then
-            gh release upload v1.0.0 CanShop-v1.00.apk CanShop-v1.00.apk.sha256 --clobber
-            gh release edit v1.0.0 --title "CanShop v1.00" --notes-file docs/RELEASE_NOTES_v1.00.md --latest
+          if gh release view v1.0.1 >/dev/null 2>&1; then
+            gh release upload v1.0.1 CanShop-v1.01.apk CanShop-v1.01.apk.sha256 --clobber
+            gh release edit v1.0.1 --title "CanShop v1.01" --notes-file docs/RELEASE_NOTES_v1.01.md --latest
           else
-            gh release create v1.0.0 CanShop-v1.00.apk CanShop-v1.00.apk.sha256 \
+            gh release create v1.0.1 CanShop-v1.01.apk CanShop-v1.01.apk.sha256 \
               --target "$GITHUB_SHA" \
-              --title "CanShop v1.00" \
-              --notes-file docs/RELEASE_NOTES_v1.00.md \
+              --title "CanShop v1.01" \
+              --notes-file docs/RELEASE_NOTES_v1.01.md \
               --latest
           fi

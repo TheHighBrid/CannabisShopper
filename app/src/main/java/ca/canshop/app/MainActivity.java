@@ -16,15 +16,19 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
-    private static final String SOURCE_URL =
-            "https://www.bulkbuddy.co/product-category/cannabis/craft-cannabis-flowers/";
-    private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+    private static final int MAX_RESPONSE_BYTES = 6 * 1024 * 1024;
+    private static final String APP_VERSION = "1.0.1";
+    private static final String BROWSER_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36 CanShop/1.0.1";
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
@@ -55,7 +59,7 @@ public final class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // The application is a research comparator, not a storefront browser.
+                // CanShop extracts public listing data but never opens the storefront or checkout.
                 return true;
             }
         });
@@ -84,34 +88,33 @@ public final class MainActivity extends Activity {
 
     public final class AndroidBridge {
         @JavascriptInterface
-        public void refreshCraftFlowerCatalog() {
-            networkExecutor.execute(() -> fetchCatalog(SOURCE_URL));
+        public void fetchBulkBuddyPage(String requestId, String rawUrl) {
+            networkExecutor.execute(() -> fetchPage(requestId, rawUrl));
         }
 
         @JavascriptInterface
         public String appVersion() {
-            return "1.0.0";
+            return APP_VERSION;
         }
     }
 
-    private void fetchCatalog(String sourceUrl) {
+    private void fetchPage(String requestId, String rawUrl) {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(sourceUrl);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(15_000);
-            connection.setReadTimeout(20_000);
+            URL safeUrl = validateBulkBuddyUrl(rawUrl);
+            connection = (HttpURLConnection) safeUrl.openConnection();
+            connection.setConnectTimeout(18_000);
+            connection.setReadTimeout(25_000);
             connection.setInstanceFollowRedirects(true);
             connection.setRequestMethod("GET");
-            connection.setRequestProperty(
-                    "User-Agent",
-                    "CanShop/1.0 Android; legal adult-use cannabis research in Canada"
-            );
-            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml");
+            connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
+            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8");
+            connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
+            connection.setRequestProperty("Cache-Control", "no-cache");
 
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
-                throw new IllegalStateException("Catalog request returned HTTP " + status + ".");
+                throw new IllegalStateException("Bulk Buddy returned HTTP " + status + ".");
             }
 
             try (BufferedInputStream input = new BufferedInputStream(connection.getInputStream());
@@ -122,23 +125,70 @@ public final class MainActivity extends Activity {
                 while ((read = input.read(buffer)) != -1) {
                     total += read;
                     if (total > MAX_RESPONSE_BYTES) {
-                        throw new IllegalStateException("Catalog response exceeded the safe size limit.");
+                        throw new IllegalStateException("The page exceeded CanShop's 6 MB safety limit.");
                     }
                     output.write(buffer, 0, read);
                 }
+
                 String html = output.toString(StandardCharsets.UTF_8.name());
-                dispatchJavascript("window.CanShop.receiveCatalog(" + JSONObject.quote(html) + ");");
+                String resolvedUrl = connection.getURL().toString();
+                dispatchJavascript(
+                        "window.CanShop.receivePage(" +
+                                JSONObject.quote(requestId) + "," +
+                                JSONObject.quote(resolvedUrl) + "," +
+                                JSONObject.quote(html) +
+                                ");"
+                );
             }
         } catch (Exception error) {
             String message = error.getMessage() == null
-                    ? "Unable to refresh the catalog."
+                    ? "Unable to fetch the Bulk Buddy page."
                     : error.getMessage();
-            dispatchJavascript("window.CanShop.receiveError(" + JSONObject.quote(message) + ");");
+            dispatchJavascript(
+                    "window.CanShop.receiveFetchError(" +
+                            JSONObject.quote(requestId) + "," +
+                            JSONObject.quote(message) +
+                            ");"
+            );
         } finally {
             if (connection != null) {
                 connection.disconnect();
             }
         }
+    }
+
+    private URL validateBulkBuddyUrl(String rawUrl) throws Exception {
+        URI uri = new URI(rawUrl == null ? "" : rawUrl.trim());
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        String path = uri.getPath() == null ? "/" : uri.getPath();
+        String query = uri.getRawQuery() == null ? "" : uri.getRawQuery();
+
+        if (!"https".equalsIgnoreCase(scheme)) {
+            throw new SecurityException("Only HTTPS Bulk Buddy pages can be fetched.");
+        }
+        if (host == null) {
+            throw new SecurityException("The requested page has no valid host.");
+        }
+
+        String normalizedHost = host.toLowerCase(Locale.CANADA);
+        if (!"bulkbuddy.co".equals(normalizedHost) && !"www.bulkbuddy.co".equals(normalizedHost)) {
+            throw new SecurityException("CanShop only fetches bulkbuddy.co.");
+        }
+
+        boolean productPage = path.startsWith("/product/");
+        boolean categoryPage = path.startsWith("/product-category/cannabis/craft-cannabis-flowers");
+        boolean searchPath = "/".equals(path) || path.matches("/page/\\d+/?");
+        boolean craftSearch = searchPath
+                && query.contains("post_type=product")
+                && query.contains("taxonomy=product_cat")
+                && query.contains("craft-cannabis-flowers");
+
+        if (!productPage && !categoryPage && !craftSearch) {
+            throw new SecurityException("That Bulk Buddy page is outside the craft-flower crawler scope.");
+        }
+
+        return uri.toURL();
     }
 
     private void dispatchJavascript(String script) {

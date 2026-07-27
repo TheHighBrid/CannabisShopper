@@ -5,12 +5,12 @@ import { scoreProducts } from './scoring.js';
 import { parseProducts, scrapeProducts } from './scraper.js';
 import { OrderHistoryEntry, UserPreferences } from './types.js';
 
-const SOURCE_URL = 'https://www.bulkbuddy.co/product-category/cannabis/craft-cannabis-flowers/';
+const SOURCE_URL = 'https://www.bulkbuddy.co/?term=craft-cannabis-flowers&s=&post_type=product&taxonomy=product_cat';
 
 const defaultPreferences: UserPreferences = {
-  targetThcPercent: 24,
+  targetThcPercent: 27,
   maxThcPercent: 32,
-  preferredFlavours: ['citrus', 'gas', 'pine', 'berry'],
+  preferredFlavours: ['citrus', 'gas', 'pine', 'berry', 'diesel'],
   priceSensitivity: 'medium',
   transparencyPriority: 'high'
 };
@@ -34,13 +34,7 @@ function readArg(name: string): string | undefined {
 const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === entryUrl) {
   runComparison(readArg('--html-file'))
-    .then(async (output) => {
-      console.log(output);
-
-      if (shouldEmail()) {
-        await emailReport(output);
-      }
-    })
+    .then((output) => console.log(output))
     .catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : error);
       process.exitCode = 1;

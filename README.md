@@ -1,22 +1,32 @@
-# CanShop v1.00
+# CanShop v1.01
 
 CanShop is an Android and command-line research notebook for comparing **craft cannabis flower** listings for legal-age adults in Canada. It is intentionally non-transactional: it does not sell cannabis, place orders, open checkout pages, prescribe products, or make medical or safety claims.
 
-## v1.00 highlights
+## Automatic Bulk Buddy extraction
 
-- Native Android shell with an offline-first mobile interface
-- Legal-age confirmation screen
-- Manual craft-flower entry and persistent on-device comparison notebook
-- Public craft-flower category refresh through a native HTTPS bridge
-- Automatic exclusion of kief, hash, pre-rolls, edibles, vapes, extracts, concentrates, and CBD candy
-- Discount badges ignored in value scoring
-- Price-per-gram normalization in Canadian dollars
-- Preference matching for terpene and flavour words
-- Availability, transparency, cannabinoid-field, and review-quality signals
-- Three-ounce variety versus quarter-pound guardrail: a single-strain QP must be at least 15% cheaper per gram, with comparable transparency, before it avoids a ranking penalty
-- Clearly labelled fictional sample data for testing
-- TypeScript CLI retained and repaired
-- GitHub Actions validation, APK compilation, SHA-256 generation, artifact upload, and release publication
+The Android app no longer requires the user to type every strain manually. Tap **Fetch Bulk Buddy strains** and CanShop will:
+
+1. Request the targeted craft-cannabis search page.
+2. Fall back to the craft category page when necessary.
+3. Follow pagination and discover the individual strain links.
+4. Open each product page through the restricted native HTTPS bridge.
+5. Skip explicitly unavailable or out-of-stock products.
+6. Extract only the useful comparison fields.
+
+### Extracted fields
+
+- product title and strain type
+- average rating and rating count
+- flavour profile
+- THC minimum and maximum
+- CBD listing
+- batch date
+- current one-ounce variation price
+- current quarter-pound variation price
+- calculated price per gram for both package sizes
+- availability signal
+
+Exact one-ounce and quarter-pound prices are read from WooCommerce variation data. CanShop does not guess package prices from the broad minimum-to-maximum price range shown near the product title.
 
 ## Android release identity
 
@@ -24,12 +34,23 @@ CanShop is an Android and command-line research notebook for comparing **craft c
 |---|---|
 | App name | CanShop |
 | Package | `ca.canshop.app` |
-| Version name | `1.0.0` |
-| Version code | `100` |
+| Version name | `1.0.1` |
+| Version code | `101` |
 | Minimum Android | Android 6.0, API 23 |
 | Target Android | API 35 |
-| Release tag | `v1.0.0` |
-| Release title | `CanShop v1.00` |
+| Release tag | `v1.0.1` |
+| Release title | `CanShop v1.01` |
+
+## Other capabilities
+
+- Legal-age confirmation screen
+- Persistent on-device comparison notebook and preferences
+- Ranking by one-ounce or quarter-pound value
+- Preference matching for flavour words and target THC
+- Automatic exclusion of kief, hash, pre-rolls, edibles, vapes, extracts, concentrates, CBD candy, shake, and trim
+- Manual entry retained as a fallback
+- TypeScript CLI retained and validated
+- GitHub Actions validation, APK compilation, SHA-256 generation, artifact upload, and release publication
 
 ## Build locally
 
@@ -48,13 +69,14 @@ The APK is written to:
 app/build/outputs/apk/release/app-release.apk
 ```
 
-The automated GitHub build renames it to `CanShop-v1.00.apk` and publishes it with a SHA-256 checksum.
+The automated GitHub build renames it to `CanShop-v1.01.apk` and publishes it with a SHA-256 checksum.
 
 ## CLI usage
 
 ```bash
 npm install
 npm run build
+node dist/index.js
 ```
 
 Offline HTML parsing:
@@ -63,19 +85,21 @@ Offline HTML parsing:
 node dist/index.js --html-file ./craft-flowers.html
 ```
 
-## Data and privacy
+## Data, security, and privacy
 
-Manual entries and preferences stay in Android WebView local storage. CanShop has no account system, analytics SDK, advertising SDK, location permission, payment handling, or server database. Live refresh sends an HTTPS request only to the configured public craft-flower category.
+Manual entries, fetched results, and preferences stay in Android WebView local storage. CanShop has no account system, analytics SDK, advertising SDK, location permission, payment handling, or server database.
+
+The native fetch bridge accepts only HTTPS URLs on `bulkbuddy.co` and only the configured craft search/category endpoints or `/product/` pages. Requests have timeout and response-size limits. Storefront navigation and checkout remain blocked.
 
 ## Important limits
 
-Public storefront layouts change. A refresh can fail or return incomplete fields when the source HTML changes, blocks automated requests, or omits information. CanShop marks missing data and provides manual entry as the reliable fallback. Verify product freshness, legality, lab information, availability, and local rules independently.
+Public storefront layouts and WooCommerce variation payloads can change. A refresh can fail or return incomplete fields when the source blocks requests, changes its HTML, or omits variation information. CanShop shows missing fields as `Not found` instead of inventing data. Verify prices, freshness, legality, lab information, availability, and local rules independently.
 
 ## Documentation
 
 - [Start-to-finish setup tutorial](docs/SETUP_TUTORIAL.md)
 - [Final v1.00 audit](docs/FINAL_AUDIT_v1.00.md)
-- [Release notes](docs/RELEASE_NOTES_v1.00.md)
+- [v1.01 release notes](docs/RELEASE_NOTES_v1.01.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
