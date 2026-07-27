@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="CanShop bag and cannabis leaf mark">
+  <defs>
+    <linearGradient id="bg" x1="15" y1="8" x2="112" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#184d36"/>
+      <stop offset=".52" stop-color="#0d2a1e"/>
+      <stop offset="1" stop-color="#071710"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="42" y1="34" x2="83" y2="95" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b8d953"/>
+      <stop offset=".45" stop-color="#7bc043"/>
+      <stop offset="1" stop-color="#2e7d32"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#000" flood-opacity=".38"/>
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="29" fill="url(#bg)"/>
+  <rect x="2" y="2" width="124" height="124" rx="27" fill="none" stroke="#a9d662" stroke-opacity=".26"/>
+  <g filter="url(#shadow)">
+    <path d="M32 53v34c0 5 4 9 9 9h46c5 0 9-4 9-9V53H81V42c0-10-7-18-17-18S47 32 47 42v11H32Z" fill="#0b2419" stroke="#f7fbf5" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M47 53V42c0-10 7-18 17-18s17 8 17 18v11" fill="none" stroke="#f7fbf5" stroke-width="6" stroke-linecap="round"/>
+    <g fill="url(#leaf)" stroke="#163f24" stroke-width="1.1" stroke-linejoin="round">
+      <path d="M64 89C52 76 52 58 64 37c12 21 12 39 0 52Z"/>
+      <path d="M61 86C47 79 39 66 39 51c15 6 23 18 22 35Z"/>
+      <path d="M67 86c14-7 22-20 22-35-15 6-23 18-22 35Z"/>
+      <path d="M58 88C45 88 34 81 28 70c14-1 25 5 30 18Z"/>
+      <path d="M70 88c13 0 24-7 30-18-14-1-25 5-30 18Z"/>
+      <path d="M55 89c-8 3-15 2-21-2 7-6 14-6 21 2Z"/>
+      <path d="M73 89c8 3 15 2 21-2-7-6-14-6-21 2Z"/>
+    </g>
+    <path d="M64 55v39" stroke="#174c28" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

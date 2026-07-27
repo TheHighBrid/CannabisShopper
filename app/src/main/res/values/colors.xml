@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="forest_950">#07110D</color>
-    <color name="forest_900">#0B1812</color>
-    <color name="cream_100">#F3EEDC</color>
+    <color name="forest_1000">#030A07</color>
+    <color name="forest_950">#06120D</color>
+    <color name="forest_900">#0A1C14</color>
+    <color name="forest_850">#0F241C</color>
+    <color name="forest_800">#153126</color>
+    <color name="forest_700">#1F4935</color>
+    <color name="green_700">#2E7D32</color>
+    <color name="green_600">#5BAA47</color>
+    <color name="green_500">#7BC043</color>
+    <color name="green_400">#8BC34A</color>
+    <color name="lime_300">#B8C34A</color>
+    <color name="mint_100">#E8F5E9</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text_primary">#F4F8F1</color>
+    <color name="text_muted">#A8B5A1</color>
+    <color name="cream_100">#F4F8F1</color>
 </resources>
