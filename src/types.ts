@@ -19,6 +19,7 @@ export interface Product {
   reviewRating: FieldMarker<number>;
   availability: FieldMarker<string>;
   discountDetails: FieldMarker<string>;
+  isVarietyBundle: boolean;
   missingFields: string[];
   unreliableFields: string[];
 }

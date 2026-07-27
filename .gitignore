@@ -1,18 +1,13 @@
+.gradle/
+.idea/
+local.properties
+*.iml
+app/build/
+build/
+dist/
 node_modules/
 dist/
 .env
 *.log
 npm-debug.log*
-
-# Android
-.gradle/
-build/
-app/build/
-local.properties
-*.apk
-*.aab
-
-# Editors
 .DS_Store
-.idea/
-.vscode/

@@ -1,125 +1,84 @@
-# Compa Cana / CannabisShopper
+# CanShop v1.00
 
-Compa Cana is a craft cannabis flower ranking tool for legal adult-use cannabis research in Canada. It focuses on Bulk Buddy's craft cannabis flower category, filters out non-flower products, ranks the remaining craft flower listings, and can email the report.
+CanShop is an Android and command-line research notebook for comparing **craft cannabis flower** listings for legal-age adults in Canada. It is intentionally non-transactional: it does not sell cannabis, place orders, open checkout pages, prescribe products, or make medical or safety claims.
 
-## What it does
+## v1.00 highlights
 
-- Fetches the craft cannabis flower category.
-- Filters to craft flower only.
-- Excludes kief, hash, edibles, pre-rolls, vapes, extracts, CBD candy, and unrelated products.
-- Ranks craft flower using visible listing signals:
-  - product name
-  - strain type
-  - starting price
-  - review rating
-  - review volume
-  - availability signal
-- Ignores sitewide bulk discount banners.
-- Uses the decision rule: prefer 3 oz variety unless a single quarter-pound strain is at least 12-15% cheaper per gram than the best 3 oz variety basket after the 35% bulk discount.
-- Emails the report when SMTP settings are configured.
+- Native Android shell with an offline-first mobile interface
+- Legal-age confirmation screen
+- Manual craft-flower entry and persistent on-device comparison notebook
+- Public craft-flower category refresh through a native HTTPS bridge
+- Automatic exclusion of kief, hash, pre-rolls, edibles, vapes, extracts, concentrates, and CBD candy
+- Discount badges ignored in value scoring
+- Price-per-gram normalization in Canadian dollars
+- Preference matching for terpene and flavour words
+- Availability, transparency, cannabinoid-field, and review-quality signals
+- Three-ounce variety versus quarter-pound guardrail: a single-strain QP must be at least 15% cheaper per gram, with comparable transparency, before it avoids a ranking penalty
+- Clearly labelled fictional sample data for testing
+- TypeScript CLI retained and repaired
+- GitHub Actions validation, APK compilation, SHA-256 generation, artifact upload, and release publication
 
-This is a research/comparison tool only. It does not make medical, safety, or purchase claims.
+## Android release identity
 
-## CLI usage in Termux / Node
+| Field | Value |
+|---|---|
+| App name | CanShop |
+| Package | `ca.canshop.app` |
+| Version name | `1.0.0` |
+| Version code | `100` |
+| Minimum Android | Android 6.0, API 23 |
+| Target Android | API 35 |
+| Release tag | `v1.0.0` |
+| Release title | `CanShop v1.00` |
 
-Install dependencies:
+## Build locally
+
+Requirements: Java 17, Android SDK 35, Build Tools 35.0.0, Gradle 8.7, and Node.js 20+.
 
 ```bash
 npm install
+npm run check
+npm run build
+gradle clean assembleRelease
 ```
 
-Build:
+The APK is written to:
+
+```text
+app/build/outputs/apk/release/app-release.apk
+```
+
+The automated GitHub build renames it to `CanShop-v1.00.apk` and publishes it with a SHA-256 checksum.
+
+## CLI usage
 
 ```bash
+npm install
 npm run build
 ```
 
-Run and email automatically:
+Offline HTML parsing:
 
 ```bash
-npm start
+node dist/index.js --html-file ./craft-flowers.html
 ```
 
-Run without email:
+## Data and privacy
 
-```bash
-npm run report
-```
+Manual entries and preferences stay in Android WebView local storage. CanShop has no account system, analytics SDK, advertising SDK, location permission, payment handling, or server database. Live refresh sends an HTTPS request only to the configured public craft-flower category.
 
-Run with saved offline HTML:
+## Important limits
 
-```bash
-node dist/index.js --html-file ./bulkbuddy-craft-flowers.html
-```
+Public storefront layouts change. A refresh can fail or return incomplete fields when the source HTML changes, blocks automated requests, or omits information. CanShop marks missing data and provides manual entry as the reliable fallback. Verify product freshness, legality, lab information, availability, and local rules independently.
 
-## Email setup for CLI
+## Documentation
 
-Use a Gmail App Password, not your normal Gmail password.
+- [Start-to-finish setup tutorial](docs/SETUP_TUTORIAL.md)
+- [Final v1.00 audit](docs/FINAL_AUDIT_v1.00.md)
+- [Release notes](docs/RELEASE_NOTES_v1.00.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
-```bash
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_PORT="465"
-export SMTP_USER="lapeuffe@gmail.com"
-export SMTP_PASS="your_16_character_google_app_password"
-export EMAIL_FROM="lapeuffe@gmail.com"
-export EMAIL_TO="lapeuffe@gmail.com"
-```
+## License
 
-Then run:
-
-```bash
-npm start
-```
-
-Never commit SMTP passwords, Gmail App Passwords, API keys, or `.env` files.
-
-## Android APK
-
-This repo now contains a native Android app in `app/`.
-
-The APK app:
-
-- fetches the craft flower category directly from the phone
-- filters to craft flower only
-- shows a readable ranked report in the app
-- emails the report automatically after ranking if SMTP settings are saved
-- stores SMTP settings in Android private app preferences
-
-### Build APK with GitHub Actions
-
-A workflow is included at:
-
-```text
-.github/workflows/android-apk.yml
-```
-
-To build the APK:
-
-1. Open the repo on GitHub.
-2. Go to **Actions**.
-3. Open **Build Android APK**.
-4. Click **Run workflow**.
-5. Download the artifact named **compa-cana-debug-apk**.
-6. Inside it, install `app-debug.apk` on your Android phone.
-
-### Build APK locally with Gradle
-
-If Android SDK and Gradle are installed:
-
-```bash
-gradle :app:assembleDebug
-```
-
-The APK will be created at:
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-## Gmail note
-
-Gmail SMTP requires a Google App Password for this kind of script/app. Your normal Gmail password will fail with `535-5.7.8 Username and Password not accepted`.
-
-## Privacy note
-
-The Android app stores SMTP settings in the app's private preferences. For stronger security, create a dedicated Gmail App Password for Compa Cana and revoke it if the phone is lost or the app is no longer used.
+MIT. See [LICENSE](LICENSE).

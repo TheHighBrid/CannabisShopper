@@ -1,6 +1,22 @@
 import { FieldMarker, Product } from './types.js';
 
 const SOURCE_URL = 'https://www.bulkbuddy.co/product-category/cannabis/craft-cannabis-flowers/';
+const EXCLUDED_FORMATS = [
+  'kief',
+  'hash',
+  'pre-roll',
+  'preroll',
+  'edible',
+  'gummy',
+  'vape',
+  'cartridge',
+  'extract',
+  'concentrate',
+  'shatter',
+  'rosin',
+  'resin',
+  'cbd candy'
+];
 
 const missing = <T>(note = 'Not found on listing page'): FieldMarker<T> => ({ value: null, status: 'missing', note });
 const present = <T>(value: T): FieldMarker<T> => ({ value, status: 'present' });
@@ -10,14 +26,19 @@ const unavailable = <T>(note: string): FieldMarker<T> => ({ value: null, status:
 export async function fetchProductListing(url = SOURCE_URL): Promise<string> {
   const response = await fetch(url, {
     headers: {
-      'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36',
-      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'accept-language': 'en-CA,en;q=0.9'
-    }
+      'user-agent': 'CanShop/1.0 (+legal adult-use cannabis research in Canada)',
+      accept: 'text/html,application/xhtml+xml'
+    },
+    signal: AbortSignal.timeout(20_000)
   });
 
   if (!response.ok) {
     throw new Error(`Unable to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+
+  const length = Number(response.headers.get('content-length'));
+  if (Number.isFinite(length) && length > 4 * 1024 * 1024) {
+    throw new Error('Listing response exceeded the 4 MB safety limit.');
   }
 
   return response.text();
@@ -27,20 +48,7 @@ export function parseProducts(html: string, sourceUrl = SOURCE_URL): Product[] {
   const products = splitProductCards(html)
     .map((card) => parseProductCard(card, sourceUrl))
     .filter((product): product is Product => Boolean(product?.name.value))
-    .filter(isCraftFlowerProduct);
-
-  if (!products.length) {
-    const diagnostics = [
-      `product-wrapper matches: ${countMatches(html, /product-wrapper/gi)}`,
-      `product-title matches: ${countMatches(html, /product-title/gi)}`,
-      `product URL matches: ${countMatches(html, new RegExp('/product/', 'gi'))}`,
-      `price matches: ${countMatches(html, /woocommerce-Price-amount|\$\s*[0-9]/gi)}`
-    ].join(', ');
-
-    throw new Error(`No craft flower products parsed from source HTML. Diagnostics: ${diagnostics}`);
-  }
-
-  return products;
+    .filter(isEligibleCraftFlower);
 }
 
 export async function scrapeProducts(url = SOURCE_URL): Promise<Product[]> {
@@ -64,7 +72,7 @@ function parseProductCard(cardHtml: string, sourceUrl: string): Product | null {
 
   if (!nameText) return null;
 
-  const price = parsePrice(cardHtml);
+  const price = parseRegularPrice(cardHtml, text);
   const packageSize = parsePackageSize(text) ?? parsePackageSize(nameText);
   const thc = parsePercentNearLabel(text, 'THC');
   const cbd = parsePercentNearLabel(text, 'CBD');
@@ -76,20 +84,21 @@ function parseProductCard(cardHtml: string, sourceUrl: string): Product | null {
 
   const product: Product = {
     sourceUrl: productUrl,
-    name: present(nameText),
-    price: price == null ? missing('Price missing or unreadable') : present(price),
+    name: nameText ? present(nameText) : missing('Product name missing'),
+    price: price == null ? missing('Regular listed price missing or unreadable') : present(price),
     packageSizeGrams: packageSize == null ? missing('Package size missing or unreadable') : present(packageSize),
     pricePerGram:
       price != null && packageSize != null && packageSize > 0
-        ? derived(round(price / packageSize), 'Calculated from listing price and package size')
-        : missing('Needs both price and package size'),
+        ? derived(round(price / packageSize), 'Calculated from regular listed price and package size; discounts ignored')
+        : missing('Needs both regular listed price and package size'),
     thcPercent: thc == null ? missing('THC percentage missing on listing card') : present(thc),
     cbdPercent: cbd == null ? missing('CBD percentage missing on listing card') : present(cbd),
     terpeneDescription: terpene ? present(terpene) : missing('Terpene/flavour notes missing on listing card'),
     reviewCount: reviewCount == null ? missing('Review count missing') : present(reviewCount),
     reviewRating: reviewRating == null ? missing('Review rating missing') : present(reviewRating),
     availability,
-    discountDetails: missing('Sitewide bulk discount intentionally ignored'),
+    discountDetails: discount ? present(discount) : missing('No discount details detected'),
+    isVarietyBundle: /variety|mix(?:ed)?\s*(?:ounce|oz)|3\s*oz.*(?:bundle|mix)/i.test(`${nameText} ${text}`),
     missingFields: [],
     unreliableFields: []
   };
@@ -104,6 +113,11 @@ function parseProductCard(cardHtml: string, sourceUrl: string): Product | null {
     .map(([key]) => key);
 
   return product;
+}
+
+function isEligibleCraftFlower(product: Product): boolean {
+  const text = `${product.name.value ?? ''} ${product.terpeneDescription.value ?? ''}`.toLowerCase();
+  return !EXCLUDED_FORMATS.some((term) => text.includes(term));
 }
 
 function splitProductCards(html: string): string[] {
@@ -157,14 +171,12 @@ function sliceByStarts(input: string, starts: number[]): string[] {
   });
 }
 
-function parsePrice(input: string): number | null {
-  const text = stripTags(input);
-  const prices = [...text.matchAll(/\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/g)]
-    .map((match) => Number(match[1].replace(/,/g, '')))
-    .filter((value) => Number.isFinite(value) && value > 0);
-
-  if (!prices.length) return null;
-  return Math.min(...prices);
+function parseRegularPrice(cardHtml: string, fallbackText: string): number | null {
+  const deletedPriceHtml = firstMatch(cardHtml, /<del[^>]*>([\s\S]*?)<\/del>/i);
+  const source = deletedPriceHtml ? stripTags(deletedPriceHtml) : fallbackText;
+  const matches = [...source.matchAll(/\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/g)];
+  if (!matches.length) return null;
+  return Number(matches[0][1].replace(/,/g, ''));
 }
 
 function parsePackageSize(input: string): number | null {
@@ -179,7 +191,7 @@ function parsePercentNearLabel(input: string, label: 'THC' | 'CBD'): number | nu
   const after = input.match(new RegExp(`${label}[^0-9]{0,20}([0-9]+(?:\\.[0-9]+)?)\\s*%`, 'i'));
   const before = input.match(new RegExp(`([0-9]+(?:\\.[0-9]+)?)\\s*%[^A-Za-z0-9]{0,20}${label}`, 'i'));
   const parsed = Number(after?.[1] ?? before?.[1]);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function parseReviewCount(cardHtml: string, input: string): number | null {

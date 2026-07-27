@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07110d">
+  <title>CanShop</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="ageGate" class="gate" hidden>
+    <section class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+      <p class="eyebrow">LEGAL-AGE RESEARCH TOOL</p>
+      <h1 id="gateTitle">CanShop is for adults only.</h1>
+      <p>Confirm that you are of legal age for cannabis in your Canadian province or territory. CanShop compares public listing information and does not sell, deliver, prescribe, or provide medical advice.</p>
+      <button id="confirmAge" class="primary">I am of legal age</button>
+      <button id="declineAge" class="ghost">Exit</button>
+    </section>
+  </div>
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">CRAFT FLOWER RESEARCH</p>
+      <h1>CanShop <span>v1.00</span></h1>
+    </div>
+    <button id="refreshButton" class="icon-button" aria-label="Refresh live craft flower listing">↻</button>
+  </header>
+
+  <main>
+    <section class="hero panel">
+      <div>
+        <p class="kicker">COMPARE THE SIGNALS, NOT THE HYPE</p>
+        <h2>A cleaner lens for craft flower.</h2>
+        <p>Rank legal adult-use craft flower using price per gram, listing transparency, review strength, terpene fit, and your own history.</p>
+      </div>
+      <div class="hero-actions">
+        <button id="loadSample" class="secondary">Load sample set</button>
+        <button id="addProductButton" class="primary">Add product</button>
+      </div>
+      <p id="status" class="status" aria-live="polite">Ready. Add products or refresh the public craft-flower category.</p>
+    </section>
+
+    <section class="metrics" aria-label="Comparison summary">
+      <article><span id="metricCount">0</span><small>flower options</small></article>
+      <article><span id="metricBest">—</span><small>top research score</small></article>
+      <article><span id="metricValue">—</span><small>best listed $/g</small></article>
+    </section>
+
+    <section class="panel settings-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">YOUR FILTER</p>
+          <h2>Research preferences</h2>
+        </div>
+        <button id="toggleSettings" class="text-button" aria-expanded="false">Edit</button>
+      </div>
+      <form id="settingsForm" class="settings-grid" hidden>
+        <label>Target THC %<input id="targetThc" type="number" inputmode="decimal" min="0" max="45" step="0.1" value="24"></label>
+        <label>Maximum $/g<input id="maxPricePerGram" type="number" inputmode="decimal" min="0" step="0.01" value="8"></label>
+        <label class="wide">Preferred terpene or flavour words<input id="preferredFlavours" type="text" value="citrus, gas, pine, berry" placeholder="citrus, gas, pine"></label>
+        <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked> Show available listings only</label>
+        <button class="primary wide" type="submit">Apply preferences</button>
+      </form>
+      <p class="policy-note">Discount badges are ignored. Non-flower formats such as hash, kief, pre-rolls, edibles, vapes, extracts, concentrates, and CBD candy are excluded.</p>
+    </section>
+
+    <section class="section-heading results-heading">
+      <div>
+        <p class="eyebrow">RANKED RESEARCH SHORTLIST</p>
+        <h2>Craft flower comparison</h2>
+      </div>
+      <button id="clearButton" class="text-button">Clear</button>
+    </section>
+
+    <section id="emptyState" class="empty panel">
+      <div class="empty-mark">C</div>
+      <h3>No products in the notebook yet.</h3>
+      <p>Refresh the live category, load the clearly labelled sample set, or enter a product manually.</p>
+    </section>
+
+    <section id="results" class="results" aria-live="polite"></section>
+
+    <section class="panel method">
+      <p class="eyebrow">METHOD</p>
+      <h2>How CanShop scores</h2>
+      <div class="method-grid">
+        <div><strong>30%</strong><span>Price and package value</span></div>
+        <div><strong>25%</strong><span>Listing transparency</span></div>
+        <div><strong>20%</strong><span>Review quality and volume</span></div>
+        <div><strong>15%</strong><span>Terpene preference match</span></div>
+        <div><strong>10%</strong><span>Cannabinoid profile completeness</span></div>
+      </div>
+      <p class="policy-note">Three-ounce variety bundles are preferred over a single-strain quarter pound unless the quarter pound is at least 15% cheaper per gram with comparable listing transparency.</p>
+    </section>
+  </main>
+
+  <dialog id="productDialog">
+    <form id="productForm" method="dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">MANUAL ENTRY</p><h2>Add craft flower</h2></div>
+        <button type="button" id="closeDialog" class="icon-button" aria-label="Close">×</button>
+      </div>
+      <label>Product name<input id="productName" required maxlength="100"></label>
+      <div class="form-row">
+        <label>Price (CAD)<input id="productPrice" required type="number" inputmode="decimal" min="0" step="0.01"></label>
+        <label>Package grams<input id="productGrams" required type="number" inputmode="decimal" min="0.1" step="0.01"></label>
+      </div>
+      <div class="form-row">
+        <label>THC %<input id="productThc" type="number" inputmode="decimal" min="0" max="45" step="0.1"></label>
+        <label>CBD %<input id="productCbd" type="number" inputmode="decimal" min="0" max="45" step="0.1"></label>
+      </div>
+      <div class="form-row">
+        <label>Rating / 5<input id="productRating" type="number" inputmode="decimal" min="0" max="5" step="0.1"></label>
+        <label>Review count<input id="productReviews" type="number" inputmode="numeric" min="0" step="1"></label>
+      </div>
+      <label>Terpene / flavour notes<input id="productTerpenes" maxlength="180" placeholder="citrus, fuel, pine"></label>
+      <label class="checkbox"><input id="productAvailable" type="checkbox" checked> Listing appears available</label>
+      <label class="checkbox"><input id="productVariety" type="checkbox"> Three-ounce variety bundle</label>
+      <button class="primary" type="submit">Add to comparison</button>
+    </form>
+  </dialog>
+
+  <footer>
+    <p>CanShop is an independent research notebook. Verify freshness, legality, lab information, availability, and local rules yourself.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
