@@ -178,7 +178,8 @@ public final class MainActivity extends Activity {
 
         boolean productPage = path.startsWith("/product/");
         boolean categoryPage = path.startsWith("/product-category/cannabis/craft-cannabis-flowers");
-        boolean craftSearch = "/".equals(path)
+        boolean searchPath = "/".equals(path) || path.matches("/page/\\d+/?");
+        boolean craftSearch = searchPath
                 && query.contains("post_type=product")
                 && query.contains("taxonomy=product_cat")
                 && query.contains("craft-cannabis-flowers");
