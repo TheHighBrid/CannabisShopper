@@ -1,0 +1,31 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ca.canshop.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ca.canshop.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 100
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            // GitHub release builds are sideload-signed with Android's debug key.
+            // Replace this with a private release keystore before Play Store distribution.
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

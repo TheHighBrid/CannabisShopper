@@ -1,15 +1,23 @@
 {
   "name": "cannabis-shopper",
   "version": "1.0.0",
-  "description": "Research-focused cannabis flower comparison tool for legal adult-use cannabis in Canada.",
+  "description": "CanShop: a research-focused craft cannabis flower comparison tool for legal-age adults in Canada.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsc --noEmit"
+    "test": "tsc --noEmit",
+    "check:web": "node --check app/src/main/assets/app.js",
+    "check": "npm run test && npm run check:web"
   },
-  "keywords": ["cannabis", "comparison", "canada", "research"],
+  "keywords": ["cannabis", "craft-flower", "comparison", "canada", "research", "android"],
   "license": "MIT",
   "type": "module",
-  "devDependencies": {}
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.6.3"
+  }
 }

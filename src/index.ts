@@ -1,7 +1,8 @@
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { formatRecommendation, buildRecommendationResult } from './output.js';
 import { scoreProducts } from './scoring.js';
 import { parseProducts, scrapeProducts } from './scraper.js';
-import { readFile } from 'node:fs/promises';
 import { OrderHistoryEntry, UserPreferences } from './types.js';
 
 const SOURCE_URL = 'https://www.bulkbuddy.co/product-category/cannabis/craft-cannabis-flowers/';
@@ -29,7 +30,8 @@ function readArg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (import.meta.url === entryUrl) {
   runComparison(readArg('--html-file'))
     .then((output) => console.log(output))
     .catch((error: unknown) => {
