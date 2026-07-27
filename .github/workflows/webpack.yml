@@ -69,7 +69,18 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build signed sideload APK
-        run: gradle --no-daemon clean assembleRelease
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon clean assembleRelease 2>&1 | tee gradle-errors.log
+
+      - name: Upload Android build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canshop-android-diagnostics
+          path: gradle-errors.log
+          if-no-files-found: error
 
       - name: Prepare APK
         run: |
