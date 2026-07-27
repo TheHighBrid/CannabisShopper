@@ -31,11 +31,11 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_ATTEMPTS = 3;
-    private static final String APP_VERSION = "1.0.2";
+    private static final String APP_VERSION = "2.0.0";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String BROWSER_USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 CanShop/1.0.2";
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 CanShop/2.0.0";
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
