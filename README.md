@@ -55,7 +55,6 @@ The automated GitHub build renames it to `CanShop-v1.00.apk` and publishes it wi
 ```bash
 npm install
 npm run build
-node dist/index.js
 ```
 
 Offline HTML parsing:

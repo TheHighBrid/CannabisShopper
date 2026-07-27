@@ -45,7 +45,7 @@ export async function fetchProductListing(url = SOURCE_URL): Promise<string> {
 }
 
 export function parseProducts(html: string, sourceUrl = SOURCE_URL): Product[] {
-  return splitProductCards(html)
+  const products = splitProductCards(html)
     .map((card) => parseProductCard(card, sourceUrl))
     .filter((product): product is Product => Boolean(product?.name.value))
     .filter(isEligibleCraftFlower);
@@ -57,24 +57,30 @@ export async function scrapeProducts(url = SOURCE_URL): Promise<Product[]> {
 
 function parseProductCard(cardHtml: string, sourceUrl: string): Product | null {
   const text = normalize(stripTags(cardHtml));
-  const productUrl = absolutize(firstMatch(cardHtml, /href=["']([^"']*\/product\/[^"']+)["']/i), sourceUrl);
-  const nameText = decodeEntities(
-    firstMatch(cardHtml, /class=["'][^"']*(?:woocommerce-loop-product__title|product-title)[^"']*["'][^>]*>(.*?)<\//is) ??
-      firstMatch(cardHtml, /<h[23][^>]*>(.*?)<\/h[23]>/is) ??
-      ''
-  ).trim();
 
-  if (!nameText && !/\$/.test(text)) return null;
+  const productUrl = absolutize(
+    firstMatch(cardHtml, /href=["']([^"']*\/product\/[^"']+)["']/i),
+    sourceUrl
+  );
+
+  const nameText = cleanHtml(
+    firstMatch(cardHtml, /<h[1-6][^>]*class=["'][^"']*\bproduct-title\b[^"']*["'][^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i) ??
+      firstMatch(cardHtml, /<a[^>]+href=["'][^"']*\/product\/[^"']+["'][^>]*>([\s\S]*?)<\/a>/i) ??
+      firstMatch(cardHtml, /class=["'][^"']*(?:woocommerce-loop-product__title|product-title)[^"']*["'][^>]*>([\s\S]*?)<\//i) ??
+      ''
+  );
+
+  if (!nameText) return null;
 
   const price = parseRegularPrice(cardHtml, text);
   const packageSize = parsePackageSize(text) ?? parsePackageSize(nameText);
   const thc = parsePercentNearLabel(text, 'THC');
   const cbd = parsePercentNearLabel(text, 'CBD');
-  const reviewCount = parseReviewCount(text);
+  const reviewCount = parseReviewCount(cardHtml, text);
   const reviewRating = parseRating(cardHtml, text);
-  const terpene = parseTerpeneDescription(text);
-  const availability = parseAvailability(text);
-  const discount = parseDiscount(text);
+  const strain = cleanHtml(extractClassText(cardHtml, 'gs_strain') ?? '');
+  const terpene = parseTerpeneDescription(text) ?? (strain || null);
+  const availability = parseAvailability(text, cardHtml);
 
   const product: Product = {
     sourceUrl: productUrl,
@@ -99,7 +105,9 @@ function parseProductCard(cardHtml: string, sourceUrl: string): Product | null {
 
   product.missingFields = Object.entries(product)
     .filter(([, value]) => isField(value) && value.status === 'missing')
-    .map(([key]) => key);
+    .map(([key]) => key)
+    .filter((key) => key !== 'discountDetails');
+
   product.unreliableFields = Object.entries(product)
     .filter(([, value]) => isField(value) && value.status === 'unreliable')
     .map(([key]) => key);
@@ -113,9 +121,54 @@ function isEligibleCraftFlower(product: Product): boolean {
 }
 
 function splitProductCards(html: string): string[] {
-  const matches = html.match(/<li[^>]+class=["'][^"']*(?:product|type-product)[^"']*["'][\s\S]*?<\/li>/gi);
-  if (matches?.length) return matches;
-  return html.match(/<div[^>]+class=["'][^"']*(?:product|type-product)[^"']*["'][\s\S]*?<\/div>/gi) ?? [];
+  const wrapperStarts = collectStarts(html, /<div[^>]+class=["'][^"']*\bproduct-wrapper\b[^"']*["'][^>]*>/gi);
+  if (wrapperStarts.length) return sliceByStarts(html, wrapperStarts);
+
+  const typeStarts = collectStarts(html, /<div[^>]+class=["'][^"']*\bproduct-type-3\b[^"']*["'][^>]*>/gi);
+  if (typeStarts.length) return sliceByStarts(html, typeStarts);
+
+  const liStarts = collectStarts(html, /<li[^>]+class=["'][^"']*(?:\bproduct\b|\btype-product\b)[^"']*["'][^>]*>/gi);
+  if (liStarts.length) return sliceByStarts(html, liStarts);
+
+  const titleStarts = collectStarts(html, /<h[1-6][^>]*class=["'][^"']*\bproduct-title\b[^"']*["'][^>]*>/gi);
+  if (titleStarts.length) {
+    return titleStarts.map((start, index) => {
+      const from = Math.max(0, start - 2500);
+      const to = titleStarts[index + 1] ?? Math.min(html.length, start + 12000);
+      return html.slice(from, to);
+    });
+  }
+
+  const productLinkStarts = collectStarts(html, /<a[^>]+href=["'][^"']*\/product\/[^"']+["'][^>]*>/gi);
+  return productLinkStarts.map((start, index) => {
+    const from = Math.max(0, start - 2500);
+    const to = productLinkStarts[index + 1] ?? Math.min(html.length, start + 12000);
+    return html.slice(from, to);
+  });
+}
+
+function isCraftFlowerProduct(product: Product): boolean {
+  const name = product.name.value?.toLowerCase() ?? '';
+  if (!name.includes('craft')) return false;
+
+  const blocked = [
+    'kief', 'hash', 'pre-roll', 'pre rolled', 'joint', 'joints', 'gummy', 'gummies',
+    'edible', 'edibles', 'extract', 'extracts', 'vape', 'cart', 'cartridge', 'shatter',
+    'wax', 'rosin', 'distillate', 'cbd', 'twisted extracts'
+  ];
+
+  return !blocked.some((word) => name.includes(word));
+}
+
+function collectStarts(input: string, regex: RegExp): number[] {
+  return [...input.matchAll(regex)].map((match) => match.index ?? 0);
+}
+
+function sliceByStarts(input: string, starts: number[]): string[] {
+  return starts.map((start, index) => {
+    const end = starts[index + 1] ?? input.length;
+    return input.slice(start, end);
+  });
 }
 
 function parseRegularPrice(cardHtml: string, fallbackText: string): number | null {
@@ -129,42 +182,55 @@ function parseRegularPrice(cardHtml: string, fallbackText: string): number | nul
 function parsePackageSize(input: string): number | null {
   const ounce = input.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:oz|ounce)/i);
   if (ounce) return round(Number(ounce[1]) * 28.3495);
+
   const grams = input.match(/([0-9]+(?:\.[0-9]+)?)\s*g(?:ram)?s?\b/i);
   return grams ? Number(grams[1]) : null;
 }
 
 function parsePercentNearLabel(input: string, label: 'THC' | 'CBD'): number | null {
-  const after = input.match(new RegExp(`${label}[^0-9]{0,12}([0-9]+(?:\\.[0-9]+)?)\\s*%`, 'i'));
-  const before = input.match(new RegExp(`([0-9]+(?:\\.[0-9]+)?)\\s*%[^A-Za-z0-9]{0,12}${label}`, 'i'));
+  const after = input.match(new RegExp(`${label}[^0-9]{0,20}([0-9]+(?:\\.[0-9]+)?)\\s*%`, 'i'));
+  const before = input.match(new RegExp(`([0-9]+(?:\\.[0-9]+)?)\\s*%[^A-Za-z0-9]{0,20}${label}`, 'i'));
   const parsed = Number(after?.[1] ?? before?.[1]);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function parseReviewCount(input: string): number | null {
+function parseReviewCount(cardHtml: string, input: string): number | null {
+  const countText = cleanHtml(extractClassText(cardHtml, 'count-text') ?? '');
+  const countFromClass = Number(countText.match(/[0-9]+/)?.[0]);
+  if (Number.isFinite(countFromClass) && countFromClass > 0) return countFromClass;
+
   const match = input.match(/([0-9]+)\s*(?:customer\s*)?reviews?/i);
   return match ? Number(match[1]) : null;
 }
 
 function parseRating(cardHtml: string, input: string): number | null {
+  const strongRating = cleanHtml(
+    firstMatch(cardHtml, /<strong[^>]*class=["'][^"']*\brating\b[^"']*["'][^>]*>([\s\S]*?)<\/strong>/i) ?? ''
+  );
+  const parsedStrong = Number(strongRating);
+  if (Number.isFinite(parsedStrong) && parsedStrong > 0) return parsedStrong;
+
   const source = `${firstMatch(cardHtml, /aria-label=["']([^"']*Rated[^"']*)["']/i) ?? ''} ${input}`;
   const match = source.match(/Rated\s+([0-9.]+)\s+out of 5/i) ?? source.match(/([0-9.]+)\s*\/\s*5/);
   return match ? Number(match[1]) : null;
 }
 
 function parseTerpeneDescription(input: string): string | null {
-  const match = input.match(/(?:terpene|flavou?r|aroma|taste)s?:?\s*([^.|]{8,140})/i);
+  const match = input.match(/(?:terpene|flavou?r|aroma|taste|strain)s?:?\s*([^.|]{3,140})/i);
   return match ? normalize(match[1]) : null;
 }
 
-function parseAvailability(input: string): FieldMarker<string> {
+function parseAvailability(input: string, cardHtml: string): FieldMarker<string> {
   if (/out of stock|sold out|unavailable/i.test(input)) return unavailable('Listing indicates out of stock or unavailable');
-  if (/in stock|add to cart|select options/i.test(input)) return present('Available or selectable on listing');
+  if (/in stock|add to cart|select options|add_to_cart_button|product_type_variable/i.test(`${input} ${cardHtml}`)) {
+    return present('Available or selectable on listing');
+  }
   return missing('Availability not explicit on listing card');
 }
 
-function parseDiscount(input: string): string | null {
-  const match = input.match(/(?:sale|save|discount|off)\s*[^.]{0,80}/i);
-  return match ? normalize(match[0]) : null;
+function extractClassText(input: string, className: string): string | null {
+  const regex = new RegExp(`<[^>]+class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/[^>]+>`, 'i');
+  return firstMatch(input, regex);
 }
 
 function firstMatch(input: string, regex: RegExp): string | null {
@@ -172,11 +238,27 @@ function firstMatch(input: string, regex: RegExp): string | null {
 }
 
 function stripTags(value: string): string {
-  return decodeEntities(value.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' '));
+  return decodeEntities(
+    value
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+  );
+}
+
+function cleanHtml(value: string): string {
+  return normalize(stripTags(value));
 }
 
 function decodeEntities(value: string): string {
-  return value.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#36;/g, '$').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&#36;/g, '$')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—');
 }
 
 function absolutize(url: string | null, base: string): string {
@@ -194,6 +276,10 @@ function normalize(value: string): string {
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function countMatches(input: string, regex: RegExp): number {
+  return [...input.matchAll(regex)].length;
 }
 
 function isField(value: unknown): value is FieldMarker<unknown> {

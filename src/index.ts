@@ -21,6 +21,7 @@ export async function runComparison(htmlFile?: string): Promise<string> {
   const products = htmlFile
     ? parseProducts(await readFile(htmlFile, 'utf8'), SOURCE_URL)
     : await scrapeProducts(SOURCE_URL);
+
   const scores = scoreProducts(products, defaultPreferences, defaultHistory);
   return formatRecommendation(buildRecommendationResult(SOURCE_URL, products, scores));
 }
@@ -33,7 +34,13 @@ function readArg(name: string): string | undefined {
 const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === entryUrl) {
   runComparison(readArg('--html-file'))
-    .then((output) => console.log(output))
+    .then(async (output) => {
+      console.log(output);
+
+      if (shouldEmail()) {
+        await emailReport(output);
+      }
+    })
     .catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : error);
       process.exitCode = 1;

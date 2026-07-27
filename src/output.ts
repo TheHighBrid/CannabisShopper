@@ -1,5 +1,18 @@
 import { Product, ProductScore, RecommendationResult } from './types.js';
 
+const c = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  underline: '\x1b[4m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  gray: '\x1b[90m'
+};
+
 export function buildRecommendationResult(sourceUrl: string, products: Product[], scores: ProductScore[]): RecommendationResult {
   return {
     batchDate: new Date().toISOString(),
@@ -12,6 +25,10 @@ export function buildRecommendationResult(sourceUrl: string, products: Product[]
 }
 
 export function formatRecommendation(result: RecommendationResult): string {
+  const craftScores = result.scores
+    .filter((score) => isCraftFlower(score.product))
+    .sort((a, b) => listingScore(b.product) - listingScore(a.product));
+
   const lines: string[] = [];
   lines.push('# CanShop craft flower comparison');
   lines.push(`Batch date: ${result.batchDate}`);
@@ -47,47 +64,41 @@ export function formatRecommendation(result: RecommendationResult): string {
   return lines.join('\n');
 }
 
-function formatProductRow(score: ProductScore): string {
-  const p = score.product;
-  const flags = [...p.missingFields.map((f) => `${f}:missing`), ...p.unreliableFields.map((f) => `${f}:unreliable`)];
-  return [
-    field(p.name),
-    field(p.availability),
-    money(p.price.value),
-    grams(p.packageSizeGrams.value),
-    money(p.pricePerGram.value),
-    percent(p.thcPercent.value),
-    percent(p.cbdPercent.value),
-    field(p.terpeneDescription),
-    reviewText(p),
-    flags.length ? flags.join(', ') : 'none',
-    String(score.total)
-  ].map(escapeCell).join('|').replace(/^/, '|').replace(/$/, '|');
+function isCraftFlower(product: Product): boolean {
+  const name = product.name.value?.toLowerCase() ?? '';
+  if (!name.includes('craft')) return false;
+
+  const blocked = ['kief', 'hash', 'pre-roll', 'pre rolled', 'joint', 'gummy', 'edible', 'extract', 'vape', 'cart', 'cartridge', 'shatter', 'wax', 'rosin', 'distillate', 'cbd'];
+  return !blocked.some((word) => name.includes(word));
 }
 
-function field<T>(marker: { value: T | null; status: string; note?: string }): string {
-  if (marker.value == null) return `[${marker.status}]${marker.note ? ` ${marker.note}` : ''}`;
-  return `${marker.value}${marker.status === 'derived' ? ' (calc)' : ''}`;
-}
+function listingScore(product: Product): number {
+  const rating = product.reviewRating.value;
+  const reviews = product.reviewCount.value;
+  const price = product.price.value;
 
-function reviewText(product: Product): string {
-  const rating = product.reviewRating.value == null ? 'rating missing' : `${product.reviewRating.value}/5`;
-  const count = product.reviewCount.value == null ? 'count missing' : `${product.reviewCount.value}`;
-  return `${rating}, ${count}`;
+  const ratingPart = rating == null ? 0 : (rating / 5) * 55;
+  const reviewPart = reviews == null ? 0 : Math.min(25, (Math.log10(reviews + 1) / Math.log10(201)) * 25);
+  const craftPart = 10;
+  const pricePart = price == null ? 0 : price <= 17 ? 10 : price <= 18 ? 8 : price <= 20 ? 5 : 2;
+
+  return Math.round((ratingPart + reviewPart + craftPart + pricePart) * 10) / 10;
 }
 
 function money(value: number | null): string {
   return value == null ? '[missing]' : new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(value);
 }
 
-function grams(value: number | null): string {
-  return value == null ? '[missing]' : `${value}g`;
+function value(marker: { value: string | null; status: string; note?: string }): string {
+  return marker.value ?? 'missing';
 }
 
-function percent(value: number | null): string {
-  return value == null ? '[missing]' : `${value}%`;
+function ratingText(product: Product): string {
+  const rating = product.reviewRating.value == null ? 'rating missing' : `${product.reviewRating.value}/5`;
+  const count = product.reviewCount.value == null ? 'reviews missing' : `${product.reviewCount.value} reviews`;
+  return `${rating}, ${count}`;
 }
 
-function escapeCell(value: string): string {
-  return value.replace(/\|/g, '/');
+function priceText(product: Product): string {
+  return product.price.value == null ? 'price missing' : `$${product.price.value.toFixed(2)} starting`;
 }
