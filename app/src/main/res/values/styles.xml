@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.CanShop" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.CanShop" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:statusBarColor">@color/forest_950</item>
-        <item name="android:navigationBarColor">@color/forest_950</item>
-        <item name="android:windowBackground">@color/forest_950</item>
+        <item name="android:navigationBarColor">@color/forest_1000</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">@color/green_500</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:colorAccent">@color/lime_500</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
