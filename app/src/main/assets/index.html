@@ -3,90 +3,111 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#06120d">
+  <meta name="theme-color" content="#061d14">
+  <meta name="color-scheme" content="dark">
   <title>CanShop</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-leaf" viewBox="0 0 64 64">
+      <path d="M32 5c6 11 7 19 2 27 8-9 15-13 24-14-3 10-9 17-18 21 7-2 13-1 20 3-7 7-15 9-24 6v11h-8V48c-9 3-17 1-24-6 7-4 13-5 20-3-9-4-15-11-18-21 9 1 16 5 24 14-5-8-4-16 2-27Z"/>
+    </symbol>
+    <symbol id="icon-bag" viewBox="0 0 64 64">
+      <path d="M16 24h32l3 31H13l3-31Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M22 27V18c0-7 4-11 10-11s10 4 10 11v9" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M20 11a8 8 0 1 0 1 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-filter" viewBox="0 0 24 24">
+      <path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24">
+      <path d="M12 3 20 6v6c0 5-3.2 8.3-8 10-4.8-1.7-8-5-8-10V6l8-3Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+      <path d="m8.5 12 2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24">
+      <path d="M5 20V10M12 20V4M19 20v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="m16.5 16.5 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-info" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M12 11v6M12 7.5h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-home" viewBox="0 0 24 24">
+      <path d="m4 11 8-7 8 7v9h-5v-6H9v6H4v-9Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
   <div id="ageGate" class="gate" hidden>
     <section class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
-      <img class="gate-logo" src="brand-mark.svg" alt="CanShop">
-      <p class="eyebrow">LEGAL-AGE RESEARCH TOOL</p>
-      <h1 id="gateTitle">CanShop is for adults only.</h1>
-      <p>Confirm that you are of legal age for cannabis in your Canadian province or territory. CanShop compares public listing information and does not sell, deliver, prescribe, or provide medical advice.</p>
-      <div class="gate-badges" aria-label="CanShop safeguards">
-        <span>Private on device</span>
-        <span>No checkout</span>
+      <div class="gate-brand" aria-hidden="true">
+        <span class="brand-symbol"><svg><use href="#icon-bag"></use></svg><svg class="brand-leaf"><use href="#icon-leaf"></use></svg></span>
       </div>
+      <span class="status-pill secure"><svg><use href="#icon-shield"></use></svg> Legal-age access</span>
+      <h1 id="gateTitle">Welcome to CanShop.</h1>
+      <p>Confirm that you are of legal age for cannabis in your Canadian province or territory. CanShop compares public listing information and does not sell, deliver, prescribe, or provide medical advice.</p>
       <button id="confirmAge" class="primary">I am of legal age</button>
       <button id="declineAge" class="ghost">Exit</button>
     </section>
   </div>
 
   <header class="topbar">
-    <a class="brand" href="#research" aria-label="CanShop home">
-      <img class="brand-mark" src="brand-mark.svg" alt="">
-      <span class="brand-copy">
-        <strong>Can<span>Shop</span></strong>
-        <small>Craft flower research</small>
-      </span>
+    <a class="brand" href="#home" aria-label="CanShop home">
+      <span class="brand-symbol" aria-hidden="true"><svg><use href="#icon-bag"></use></svg><svg class="brand-leaf"><use href="#icon-leaf"></use></svg></span>
+      <span class="brand-word"><strong>Can<span>Shop</span></strong><small>Craft flower research</small></span>
     </a>
-    <div class="topbar-actions">
-      <span class="version-pill">v1.02</span>
-      <button id="refreshButton" class="icon-button refresh-icon" aria-label="Fetch every current Bulk Buddy craft strain">↻</button>
-    </div>
+    <button id="refreshButton" class="icon-button" aria-label="Fetch every current Bulk Buddy craft strain"><svg><use href="#icon-refresh"></use></svg></button>
   </header>
 
-  <main>
-    <section id="research" class="hero panel">
+  <main id="home">
+    <section class="hero panel">
       <div class="hero-copy">
-        <div class="section-kicker"><span class="live-dot"></span> CURRENT CRAFT INVENTORY</div>
-        <h1>Compare flower with clarity.</h1>
-        <p>Scan supported Bulk Buddy inventory paths, read each craft strain page, and turn the useful details into one clean research notebook.</p>
-        <div class="feature-chips" aria-label="CanShop research coverage">
-          <span>Craft flower</span>
-          <span>THC &amp; CBD</span>
-          <span>1 oz &amp; QP</span>
-          <span>Ratings</span>
+        <span class="status-pill"><span class="live-dot"></span> Research notebook</span>
+        <p class="kicker">CURRENT CRAFT FLOWER, ONE CLEAN VIEW</p>
+        <h1>Compare strains with clarity, not clutter.</h1>
+        <p>CanShop scans supported Bulk Buddy inventory paths, reads each current craft flower page, and organizes the useful details into a focused local notebook.</p>
+        <div class="category-strip" aria-label="CanShop research areas">
+          <span><svg><use href="#icon-leaf"></use></svg> Flower</span>
+          <span><svg><use href="#icon-chart"></use></svg> Value</span>
+          <span><svg><use href="#icon-shield"></use></svg> Verified fields</span>
         </div>
       </div>
-      <div class="hero-art" aria-hidden="true">
-        <div class="hero-orbit"></div>
-        <img src="brand-mark.svg" alt="">
+      <div class="hero-mark" aria-hidden="true">
+        <svg class="hero-bag"><use href="#icon-bag"></use></svg>
+        <svg class="hero-leaf"><use href="#icon-leaf"></use></svg>
       </div>
       <div class="hero-actions">
         <button id="fetchButton" class="primary">Fetch Bulk Buddy strains</button>
-        <button id="addProductButton" class="secondary">Manual fallback</button>
+        <button id="addProductButton" class="secondary"><svg><use href="#icon-plus"></use></svg> Manual fallback</button>
       </div>
       <p id="status" class="status" aria-live="polite">Ready. Tap fetch to rebuild the complete current craft list from Bulk Buddy.</p>
     </section>
 
     <section class="metrics" aria-label="Comparison summary">
-      <article>
-        <div class="metric-icon leaf-icon" aria-hidden="true">✦</div>
-        <span id="metricCount">0</span>
-        <small>available strains</small>
-      </article>
-      <article>
-        <div class="metric-icon score-icon" aria-hidden="true">★</div>
-        <span id="metricBest">—</span>
-        <small>top research score</small>
-      </article>
-      <article>
-        <div class="metric-icon value-icon" aria-hidden="true">$</div>
-        <span id="metricValue">—</span>
-        <small>best selected $/g</small>
-      </article>
+      <article><span class="metric-icon"><svg><use href="#icon-leaf"></use></svg></span><div><span id="metricCount">0</span><small>available strains</small></div></article>
+      <article><span class="metric-icon"><svg><use href="#icon-chart"></use></svg></span><div><span id="metricBest">—</span><small>top research score</small></div></article>
+      <article><span class="metric-icon"><svg><use href="#icon-search"></use></svg></span><div><span id="metricValue">—</span><small>best selected $/g</small></div></article>
     </section>
 
-    <section class="panel settings-panel">
+    <section id="filters" class="panel settings-panel">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">SMART FILTERS</p>
-          <h2>Research preferences</h2>
-          <p class="section-description">Tune the ranking without changing the source data.</p>
+          <p class="eyebrow">PERSONAL RESEARCH FILTER</p>
+          <h2>Shape your shortlist.</h2>
         </div>
-        <button id="toggleSettings" class="text-button" aria-expanded="false">Edit</button>
+        <button id="toggleSettings" class="text-button" aria-expanded="false"><svg><use href="#icon-filter"></use></svg> Edit</button>
       </div>
       <form id="settingsForm" class="settings-grid" hidden>
         <label>Ranking package
@@ -101,50 +122,43 @@
         <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked><span>Hide only products explicitly marked out of stock or unavailable</span></label>
         <button class="primary wide" type="submit">Apply preferences</button>
       </form>
-      <p class="policy-note">The search endpoint can be blocked or the craft category can return a partial cached list. CanShop combines several public inventory pages, follows pagination, retries failed requests, and only treats a product as unavailable when the product page explicitly says so.</p>
+      <p class="policy-note">CanShop combines several public inventory pages, follows pagination, retries failed requests, and only treats a product as unavailable when the product page explicitly says so.</p>
     </section>
 
     <section id="resultsSection" class="section-heading results-heading">
       <div>
-        <p class="eyebrow">RANKED PRODUCT-PAGE DATA</p>
-        <h2>Available craft strains</h2>
+        <p class="eyebrow">MULTI-SOURCE PRODUCT-PAGE EXTRACTION</p>
+        <h2>Your craft shortlist.</h2>
       </div>
       <button id="clearButton" class="text-button danger-text">Clear</button>
     </section>
 
     <section id="emptyState" class="empty panel">
-      <div class="empty-mark" aria-hidden="true">
-        <span class="empty-leaf">✦</span>
-      </div>
-      <span class="empty-badge">Research notebook</span>
+      <div class="empty-mark"><svg><use href="#icon-leaf"></use></svg></div>
+      <span class="status-pill">Ready to scan</span>
       <h3>No fetched strains yet.</h3>
       <p>Tap “Fetch Bulk Buddy strains.” CanShop will scan all supported inventory sources and read each current craft product page automatically.</p>
     </section>
 
     <section id="results" class="results" aria-live="polite"></section>
 
-    <section id="methodSection" class="panel method">
-      <div class="section-heading method-heading">
+    <section id="about" class="panel method">
+      <div class="section-heading compact">
         <div>
-          <p class="eyebrow">TRANSPARENT EXTRACTION</p>
-          <h2>Only the useful product-page information</h2>
+          <p class="eyebrow">EXTRACTED FIELDS</p>
+          <h2>Useful data, neatly packed.</h2>
         </div>
-        <span class="status-pill trusted">Lab-style view</span>
+        <span class="method-seal"><svg><use href="#icon-shield"></use></svg></span>
       </div>
       <div class="method-grid">
-        <div><span class="method-symbol">Aa</span><strong>Name</strong><span>Full strain and craft title</span></div>
-        <div><span class="method-symbol">◒</span><strong>Type</strong><span>Indica, sativa, or hybrid</span></div>
-        <div><span class="method-symbol">★</span><strong>Rating</strong><span>Average score and rating count</span></div>
-        <div><span class="method-symbol">✦</span><strong>Flavour</strong><span>The listed flavour profile</span></div>
-        <div><span class="method-symbol">%</span><strong>Potency</strong><span>THC range and CBD listing</span></div>
-        <div><span class="method-symbol">▦</span><strong>Batch</strong><span>Current batch date</span></div>
-        <div><span class="method-symbol">1</span><strong>1 Ounce</strong><span>Exact variation price and $/g</span></div>
-        <div><span class="method-symbol">4</span><strong>Quarter Pound</strong><span>Exact variation price and $/g</span></div>
-      </div>
-      <div class="trust-row">
-        <span><b>✓</b> Local storage</span>
-        <span><b>✓</b> No account</span>
-        <span><b>✓</b> No purchase flow</span>
+        <div><span class="method-icon">01</span><strong>Name</strong><span>Full strain and craft title</span></div>
+        <div><span class="method-icon">02</span><strong>Type</strong><span>Indica, sativa, or hybrid</span></div>
+        <div><span class="method-icon">03</span><strong>Rating</strong><span>Average score and rating count</span></div>
+        <div><span class="method-icon">04</span><strong>Flavour</strong><span>The listed flavour profile</span></div>
+        <div><span class="method-icon">05</span><strong>Potency</strong><span>THC range and CBD listing</span></div>
+        <div><span class="method-icon">06</span><strong>Batch</strong><span>Current batch date</span></div>
+        <div><span class="method-icon">07</span><strong>1 Ounce</strong><span>Exact variation price and $/g</span></div>
+        <div><span class="method-icon">08</span><strong>Quarter Pound</strong><span>Exact variation price and $/g</span></div>
       </div>
       <p class="policy-note">Bulk Buddy can change its HTML, product tags, caching, or variation data at any time. CanShop reports discovery, filtering, sold-out, and failed-page counts instead of silently dropping products.</p>
     </section>
@@ -153,8 +167,8 @@
   <dialog id="productDialog">
     <form id="productForm" method="dialog">
       <div class="dialog-head">
-        <div><p class="eyebrow">MANUAL FALLBACK</p><h2>Add one strain</h2></div>
-        <button type="button" id="closeDialog" class="icon-button" aria-label="Close">×</button>
+        <div><p class="eyebrow">MANUAL FALLBACK</p><h2>Add one strain.</h2></div>
+        <button type="button" id="closeDialog" class="icon-button" aria-label="Close"><svg><use href="#icon-close"></use></svg></button>
       </div>
       <label>Product name<input id="productName" required maxlength="120" placeholder="Strain name AAAA+ Indica Craft"></label>
       <div class="form-row">
@@ -187,16 +201,17 @@
     </form>
   </dialog>
 
-  <nav class="bottom-nav" aria-label="CanShop sections">
-    <a href="#research" class="active"><span class="nav-icon">⌂</span><small>Home</small></a>
-    <a href="#resultsSection"><span class="nav-icon">◫</span><small>Strains</small></a>
-    <a href="#methodSection"><span class="nav-icon">✓</span><small>Method</small></a>
-  </nav>
-
   <footer>
-    <img src="brand-mark.svg" alt="" aria-hidden="true">
-    <p>CanShop is an independent research notebook. Verify prices, freshness, legality, lab information, availability, and local rules yourself.</p>
+    <span class="footer-brand"><svg><use href="#icon-leaf"></use></svg> Can<span>Shop</span></span>
+    <p>Independent research notebook. Verify prices, freshness, legality, lab information, availability, and local rules yourself.</p>
   </footer>
+
+  <nav class="bottom-nav" aria-label="Primary navigation">
+    <a class="active" href="#home"><svg><use href="#icon-home"></use></svg><span>Home</span></a>
+    <a href="#resultsSection"><svg><use href="#icon-leaf"></use></svg><span>Strains</span></a>
+    <a href="#filters"><svg><use href="#icon-filter"></use></svg><span>Filters</span></a>
+    <a href="#about"><svg><use href="#icon-info"></use></svg><span>About</span></a>
+  </nav>
 
   <script src="app.js"></script>
 </body>
