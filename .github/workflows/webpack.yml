@@ -32,7 +32,18 @@ jobs:
         run: npm install
 
       - name: Type-check CLI
-        run: npm run test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee tsc-errors.log
+
+      - name: Upload TypeScript diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canshop-typescript-diagnostics
+          path: tsc-errors.log
+          if-no-files-found: error
 
       - name: Validate Android web application
         run: npm run check:web
