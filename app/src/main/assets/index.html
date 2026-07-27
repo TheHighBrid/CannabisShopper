@@ -21,23 +21,23 @@
   <header class="topbar">
     <div>
       <p class="eyebrow">CRAFT FLOWER RESEARCH</p>
-      <h1>CanShop <span>v1.01</span></h1>
+      <h1>CanShop <span>v1.02</span></h1>
     </div>
-    <button id="refreshButton" class="icon-button" aria-label="Fetch current Bulk Buddy craft strains">↻</button>
+    <button id="refreshButton" class="icon-button" aria-label="Fetch every current Bulk Buddy craft strain">↻</button>
   </header>
 
   <main>
     <section class="hero panel">
       <div>
-        <p class="kicker">ONE TAP, EVERY CURRENT STRAIN</p>
-        <h2>Let the product pages fill the notebook.</h2>
-        <p>CanShop finds the current Bulk Buddy craft strains, follows each product link, and extracts the strain name, type, rating, review count, flavour, THC, CBD, batch date, one-ounce price, quarter-pound price, and availability.</p>
+        <p class="kicker">ONE TAP, THE COMPLETE CURRENT CRAFT LIST</p>
+        <h2>Scan every inventory path, then read every strain page.</h2>
+        <p>CanShop checks the craft category, the broader cannabis inventory, strain-type categories, pagination, and the homepage. It then follows each craft product link and extracts the strain name, type, rating, rating count, flavour, THC, CBD, batch date, one-ounce price, quarter-pound price, and availability.</p>
       </div>
       <div class="hero-actions">
         <button id="fetchButton" class="primary">Fetch Bulk Buddy strains</button>
         <button id="addProductButton" class="secondary">Manual fallback</button>
       </div>
-      <p id="status" class="status" aria-live="polite">Ready. Tap fetch to rebuild the list from the current Bulk Buddy product pages.</p>
+      <p id="status" class="status" aria-live="polite">Ready. Tap fetch to rebuild the complete current craft list from Bulk Buddy.</p>
     </section>
 
     <section class="metrics" aria-label="Comparison summary">
@@ -64,15 +64,15 @@
         <label>Target THC %<input id="targetThc" type="number" inputmode="decimal" min="0" max="45" step="0.1" value="27"></label>
         <label>Maximum $/g<input id="maxPricePerGram" type="number" inputmode="decimal" min="0" step="0.01" value="8"></label>
         <label class="wide">Preferred flavour words<input id="preferredFlavours" type="text" value="citrus, gas, pine, berry, diesel" placeholder="citrus, gas, pine"></label>
-        <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked> Show only product pages with an available purchase signal</label>
+        <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked> Hide only products explicitly marked out of stock or unavailable</label>
         <button class="primary wide" type="submit">Apply preferences</button>
       </form>
-      <p class="policy-note">The crawler starts from the craft search page, follows the individual strain links, and skips out-of-stock pages. Non-flower formats such as hash, kief, pre-rolls, edibles, vapes, extracts, concentrates, shake, and trim are excluded.</p>
+      <p class="policy-note">The search endpoint can be blocked or the craft category can return a partial cached list. CanShop therefore combines several public inventory pages, follows pagination, retries failed requests, and only treats a product as unavailable when the product page explicitly says so.</p>
     </section>
 
     <section class="section-heading results-heading">
       <div>
-        <p class="eyebrow">LIVE PRODUCT-PAGE EXTRACTION</p>
+        <p class="eyebrow">MULTI-SOURCE PRODUCT-PAGE EXTRACTION</p>
         <h2>Available craft strains</h2>
       </div>
       <button id="clearButton" class="text-button">Clear</button>
@@ -81,7 +81,7 @@
     <section id="emptyState" class="empty panel">
       <div class="empty-mark">C</div>
       <h3>No fetched strains yet.</h3>
-      <p>Tap “Fetch Bulk Buddy strains.” CanShop will discover the current product links and read each strain page automatically.</p>
+      <p>Tap “Fetch Bulk Buddy strains.” CanShop will scan all supported inventory sources and read each current craft product page automatically.</p>
     </section>
 
     <section id="results" class="results" aria-live="polite"></section>
@@ -99,7 +99,7 @@
         <div><strong>1 Ounce</strong><span>Exact variation price and $/g</span></div>
         <div><strong>Quarter Pound</strong><span>Exact variation price and $/g</span></div>
       </div>
-      <p class="policy-note">Bulk Buddy can change its HTML or variation data at any time. CanShop shows “Not found” rather than inventing a missing value.</p>
+      <p class="policy-note">Bulk Buddy can change its HTML, product tags, caching, or variation data at any time. CanShop reports discovery, filtering, sold-out, and failed-page counts instead of silently dropping products.</p>
     </section>
   </main>
 
@@ -109,7 +109,7 @@
         <div><p class="eyebrow">MANUAL FALLBACK</p><h2>Add one strain</h2></div>
         <button type="button" id="closeDialog" class="icon-button" aria-label="Close">×</button>
       </div>
-      <label>Product name<input id="productName" required maxlength="120"></label>
+      <label>Product name<input id="productName" required maxlength="120" placeholder="Strain name AAAA+ Indica Craft"></label>
       <div class="form-row">
         <label>Strain type
           <select id="productType">
@@ -135,7 +135,7 @@
       </div>
       <label>Rating count<input id="productReviews" type="number" inputmode="numeric" min="0" step="1"></label>
       <label>Flavour profile<input id="productTerpenes" maxlength="240" placeholder="Berry / Diesel / Earthy / Floral / Gas"></label>
-      <label class="checkbox"><input id="productAvailable" type="checkbox" checked> Product page appears available</label>
+      <label class="checkbox"><input id="productAvailable" type="checkbox" checked> Product is not explicitly marked out of stock</label>
       <button class="primary" type="submit">Add fallback entry</button>
     </form>
   </dialog>
