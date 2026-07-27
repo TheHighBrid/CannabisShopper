@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.0.0] - 2026-07-27
+
+### Added
+
+- Complete CanShop premium green visual system across the Android WebView interface
+- New bag-and-leaf launcher artwork, circular launcher treatment, alternate icon, and branded splash screen
+- Reusable SVG icon language for navigation, refresh, filters, search, verification, information, close, and add actions
+- Responsive bottom navigation and refined legal-age entry experience
+
+### Changed
+
+- Reworked typography, foregrounds, backgrounds, highlights, accents, numbers, rank markers, separators, cards, buttons, inputs, status pills, dialogs, result layouts, and empty states
+- Standardized the palette around deep forest, fresh green, lime, clean white, and muted sage tokens
+- Updated Android status bar, navigation bar, launch background, and accent styling
+- Upgraded Android, native bridge, package, artifact, and release identities to 2.0.0
+
+### Preserved
+
+- Existing multi-source crawler, ranking, local storage, preferences, legal-age checks, security restrictions, and manual-entry fallback
+
 ## [1.0.2] - 2026-07-27
 
 ### Fixed

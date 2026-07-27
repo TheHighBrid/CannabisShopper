@@ -1,6 +1,6 @@
 {
   "name": "cannabis-shopper",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "CanShop: a research-focused craft cannabis flower comparison tool for legal-age adults in Canada.",
   "main": "dist/index.js",
   "type": "module",

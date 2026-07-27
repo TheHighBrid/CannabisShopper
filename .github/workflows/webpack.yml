@@ -84,16 +84,16 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp app/build/outputs/apk/release/app-release.apk CanShop-v1.02.apk
-          sha256sum CanShop-v1.02.apk | tee CanShop-v1.02.apk.sha256
+          cp app/build/outputs/apk/release/app-release.apk CanShop-v2.00.apk
+          sha256sum CanShop-v2.00.apk | tee CanShop-v2.00.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CanShop-v1.02
+          name: CanShop-v2.00
           path: |
-            CanShop-v1.02.apk
-            CanShop-v1.02.apk.sha256
+            CanShop-v2.00.apk
+            CanShop-v2.00.apk.sha256
           if-no-files-found: error
 
       - name: Publish or refresh GitHub release
@@ -101,13 +101,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.0.2 >/dev/null 2>&1; then
-            gh release upload v1.0.2 CanShop-v1.02.apk CanShop-v1.02.apk.sha256 --clobber
-            gh release edit v1.0.2 --title "CanShop v1.02" --notes-file docs/RELEASE_NOTES_v1.02.md --latest
+          if gh release view v2.0.0 >/dev/null 2>&1; then
+            gh release upload v2.0.0 CanShop-v2.00.apk CanShop-v2.00.apk.sha256 --clobber
+            gh release edit v2.0.0 --title "CanShop v2.00" --notes-file docs/RELEASE_NOTES_v2.00.md --latest
           else
-            gh release create v1.0.2 CanShop-v1.02.apk CanShop-v1.02.apk.sha256 \
+            gh release create v2.0.0 CanShop-v2.00.apk CanShop-v2.00.apk.sha256 \
               --target "$GITHUB_SHA" \
-              --title "CanShop v1.02" \
-              --notes-file docs/RELEASE_NOTES_v1.02.md \
+              --title "CanShop v2.00" \
+              --notes-file docs/RELEASE_NOTES_v2.00.md \
               --latest
           fi

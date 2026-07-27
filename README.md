@@ -1,6 +1,20 @@
-# CanShop v1.02
+# CanShop v2.00
 
 CanShop is an Android and command-line research notebook for comparing **craft cannabis flower** listings for legal-age adults in Canada. It is intentionally non-transactional: it does not sell cannabis, place orders, open checkout pages, prescribe products, or make medical or safety claims.
+
+## Premium CanShop interface
+
+CanShop v2.00 introduces the complete CanShop visual system across the Android application:
+
+- deep forest backgrounds with fresh leaf-green and lime accents
+- clean white foreground text and muted sage secondary text
+- redesigned launcher, round launcher, alternate icon, and splash treatment
+- unified bag-and-leaf brand symbol
+- reusable in-app icons for refresh, filters, search, information, verification, navigation, and actions
+- redesigned buttons, status pills, inputs, cards, ranking numbers, score circles, dividers, dialogs, and empty states
+- responsive mobile layout and bottom navigation
+
+The crawler, ranking model, local storage, preferences, legal-age gate, and manual-entry fallback remain intact.
 
 ## Complete Bulk Buddy extraction
 
@@ -39,12 +53,12 @@ Exact one-ounce and quarter-pound prices are read from WooCommerce variation dat
 |---|---|
 | App name | CanShop |
 | Package | `ca.canshop.app` |
-| Version name | `1.0.2` |
-| Version code | `102` |
+| Version name | `2.0.0` |
+| Version code | `200` |
 | Minimum Android | Android 6.0, API 23 |
 | Target Android | API 35 |
-| Release tag | `v1.0.2` |
-| Release title | `CanShop v1.02` |
+| Release tag | `v2.0.0` |
+| Release title | `CanShop v2.00` |
 
 ## Reliability improvements
 
@@ -83,7 +97,7 @@ The APK is written to:
 app/build/outputs/apk/release/app-release.apk
 ```
 
-The automated GitHub build renames it to `CanShop-v1.02.apk` and publishes it with a SHA-256 checksum.
+The automated GitHub build renames it to `CanShop-v2.00.apk` and publishes it with a SHA-256 checksum.
 
 ## CLI usage
 
@@ -115,6 +129,7 @@ Public storefront layouts, product tagging, caching, and WooCommerce variation p
 - [Final v1.00 audit](docs/FINAL_AUDIT_v1.00.md)
 - [v1.01 release notes](docs/RELEASE_NOTES_v1.01.md)
 - [v1.02 release notes](docs/RELEASE_NOTES_v1.02.md)
+- [v2.00 release notes](docs/RELEASE_NOTES_v2.00.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
