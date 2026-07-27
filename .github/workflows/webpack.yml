@@ -26,13 +26,19 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: Validate TypeScript and web assets
-        run: |
-          npm install
-          npm run check
-          npm run build
+      - name: Install JavaScript dependencies
+        run: npm install
+
+      - name: Type-check CLI
+        run: npm run test
+
+      - name: Validate Android web application
+        run: npm run check:web
+
+      - name: Compile TypeScript CLI
+        run: npm run build
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
