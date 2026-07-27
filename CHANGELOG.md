@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.2] - 2026-07-27
+
+### Fixed
+
+- Replaced the search-and-single-category discovery dependency that could return only a few craft strains
+- Added multi-source discovery across craft, cannabis, AAAA, indica, hybrid, sativa, homepage, and pagination pages
+- Changed availability handling so only explicit out-of-stock, sold-out, or unavailable pages are skipped
+- Added retry backoff and persistent native HTTP session cookies
+- Added detailed discovery, filtering, sold-out, and failure counts instead of silently dropping product pages
+
+### Changed
+
+- Expanded the restricted native URL allowlist to Bulk Buddy cannabis inventory pages while continuing to block checkout and unrelated hosts
+- Increased the response safety limit from 6 MB to 8 MB for large list-view inventory pages
+- Upgraded the Android and local-storage versions to 1.0.2 and schema v3
+
 ## [1.0.1] - 2026-07-27
 
 ### Added
