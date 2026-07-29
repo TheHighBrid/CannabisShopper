@@ -19,6 +19,7 @@ const EXCLUDED_FORMATS = [
   'shake',
   'trim'
 ];
+const MAX_RESPONSE_BYTES = 6 * 1024 * 1024;
 
 const missing = <T>(note = 'Not found on listing page'): FieldMarker<T> => ({
   value: null,
@@ -51,12 +52,33 @@ export async function fetchProductListing(url = SOURCE_URL): Promise<string> {
     throw new Error(`Unable to fetch ${url}: ${response.status} ${response.statusText}`);
   }
 
-  const length = Number(response.headers.get('content-length'));
-  if (Number.isFinite(length) && length > 6 * 1024 * 1024) {
+  const contentLength = response.headers.get('content-length');
+  const length = contentLength == null ? Number.NaN : Number(contentLength);
+  if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) {
     throw new Error('Listing response exceeded the 6 MB safety limit.');
   }
 
-  return response.text();
+  if (!response.body) return response.text();
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let html = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error('Listing response exceeded the 6 MB safety limit.');
+      }
+      html += decoder.decode(value, { stream: true });
+    }
+    return html + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export function parseProducts(html: string, sourceUrl = SOURCE_URL): Product[] {
@@ -166,7 +188,7 @@ function parsePercentNearLabel(input: string, label: 'THC' | 'CBD'): number | nu
   const after = input.match(new RegExp(`${label}[^0-9]{0,20}([0-9]+(?:\\.[0-9]+)?)\\s*%`, 'i'));
   const before = input.match(new RegExp(`([0-9]+(?:\\.[0-9]+)?)\\s*%[^A-Za-z0-9]{0,20}${label}`, 'i'));
   const parsed = Number(after?.[1] ?? before?.[1]);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : null;
 }
 
 function parseReviewCount(cardHtml: string, input: string): number | null {
@@ -180,10 +202,14 @@ function parseReviewCount(cardHtml: string, input: string): number | null {
 function parseRating(cardHtml: string, input: string): number | null {
   const structured = firstMatch(cardHtml, /itemprop=["']ratingValue["'][^>]+content=["']([0-9.]+)["']/i)
     ?? firstMatch(cardHtml, /content=["']([0-9.]+)["'][^>]+itemprop=["']ratingValue["']/i);
-  if (structured) return Number(structured);
+  if (structured) return validRating(Number(structured));
   const source = `${firstMatch(cardHtml, /aria-label=["']([^"']*Rated[^"']*)["']/i) ?? ''} ${input}`;
   const match = source.match(/Rated\s+([0-9.]+)\s+out of 5/i) ?? source.match(/([0-9.]+)\s*\/\s*5/);
-  return match ? Number(match[1]) : null;
+  return match ? validRating(Number(match[1])) : null;
+}
+
+function validRating(value: number): number | null {
+  return Number.isFinite(value) && value >= 0 && value <= 5 ? value : null;
 }
 
 function parseTerpeneDescription(input: string): string | null {

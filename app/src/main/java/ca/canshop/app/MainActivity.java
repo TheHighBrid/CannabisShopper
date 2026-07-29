@@ -153,7 +153,10 @@ public final class MainActivity extends Activity {
             connection = (HttpURLConnection) safeUrl.openConnection();
             connection.setConnectTimeout(20_000);
             connection.setReadTimeout(35_000);
-            connection.setInstanceFollowRedirects(true);
+            // Automatic redirects can leave the allow-listed origin before the
+            // resolved URL can be validated. Reject them and let a later retry
+            // use the original, validated URL instead.
+            connection.setInstanceFollowRedirects(false);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
             connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8");
