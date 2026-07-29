@@ -39,7 +39,7 @@ export function formatRecommendation(result: RecommendationResult): string {
   lines.push('## Research shortlist');
 
   result.shortlist.forEach((score, index) => {
-    lines.push(`### ${index + 1}. ${field(score.product.name)} - ${score.total}/100`);
+    lines.push(`### ${index + 1}. ${escapeText(field(score.product.name))} - ${score.total}/100`);
     lines.push(`Why it surfaced: ${score.reasons.slice(0, 3).join(' ') || 'Balanced available signals versus the rest of the batch.'}`);
     if (score.cautions.length) lines.push(`Watch-outs: ${score.cautions.join(' ')}`);
     lines.push('');
@@ -108,5 +108,9 @@ function percent(value: number | null): string {
 }
 
 function escapeCell(value: string): string {
-  return value.replace(/\|/g, '/');
+  return escapeText(value).replace(/\|/g, '/');
+}
+
+function escapeText(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').trim();
 }
