@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -34,8 +35,9 @@ public final class MainActivity extends Activity {
     private static final String APP_VERSION = "2.0.0";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String BROWSER_USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 CanShop/2.0.0";
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 CanShop/2.0.0";
+    private static final AtomicLong REQUEST_NONCE = new AtomicLong();
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
@@ -146,43 +148,57 @@ public final class MainActivity extends Activity {
     }
 
     private PageResponse fetchPageOnce(String rawUrl) throws Exception {
-        URL safeUrl = validateBulkBuddyUrl(rawUrl);
+        URL canonicalUrl = validateBulkBuddyUrl(rawUrl);
+        URL requestUrl = addCacheBuster(canonicalUrl);
         HttpURLConnection connection = null;
 
         try {
-            connection = (HttpURLConnection) safeUrl.openConnection();
+            connection = (HttpURLConnection) requestUrl.openConnection();
             connection.setConnectTimeout(20_000);
             connection.setReadTimeout(35_000);
+            connection.setUseCaches(false);
+            connection.setDefaultUseCaches(false);
             // Automatic redirects can leave the allow-listed origin before the
-            // resolved URL can be validated. Reject them and let a later retry
-            // use the original, validated URL instead.
+            // resolved URL can be validated. Canonicalizing the URL first avoids
+            // the storefront's normal host and trailing-slash redirects.
             connection.setInstanceFollowRedirects(false);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
             connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8");
             connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
-            connection.setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0");
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
             connection.setRequestProperty("Pragma", "no-cache");
+            connection.setRequestProperty("Expires", "0");
+            connection.setRequestProperty("If-Modified-Since", "0");
             connection.setRequestProperty("Referer", BULK_BUDDY_ORIGIN + "/product-category/cannabis/");
             connection.setRequestProperty("DNT", "1");
             connection.setRequestProperty("Connection", "keep-alive");
-            applyCookies(connection, safeUrl.toURI());
+            applyCookies(connection, requestUrl.toURI());
 
             int status = connection.getResponseCode();
             storeCookies(connection);
             if (status < 200 || status >= 300) {
                 throw new IllegalStateException(
-                        "Bulk Buddy returned HTTP " + status + " for " + safeUrl.getPath() + "."
+                        "Bulk Buddy returned HTTP " + status + " for " + canonicalUrl.getPath() + "."
                 );
             }
 
             String html = readResponse(connection.getInputStream());
-            String resolvedUrl = connection.getURL().toString();
-            validateBulkBuddyUrl(resolvedUrl);
-            return new PageResponse(resolvedUrl, html);
+            // Return the stable canonical URL rather than the temporary cache-busted
+            // request URL. The JavaScript layer uses this value as the product key,
+            // so one product cannot appear twice through query-string or host aliases.
+            return new PageResponse(canonicalUrl.toString(), html);
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private URL addCacheBuster(URL canonicalUrl) throws Exception {
+        String separator = canonicalUrl.getQuery() == null ? "?" : "&";
+        String nonce = System.currentTimeMillis() + "-" + REQUEST_NONCE.incrementAndGet();
+        URL requestUrl = new URL(canonicalUrl + separator + "_canshop=" + nonce);
+        validateBulkBuddyScope(requestUrl.toURI());
+        return requestUrl;
     }
 
     private void applyCookies(HttpURLConnection connection, URI uri) throws Exception {
@@ -230,7 +246,83 @@ public final class MainActivity extends Activity {
     }
 
     private URL validateBulkBuddyUrl(String rawUrl) throws Exception {
-        URI uri = new URI(rawUrl == null ? "" : rawUrl.trim());
+        URI input = new URI(rawUrl == null ? "" : rawUrl.trim());
+        validateBulkBuddyScope(input);
+
+        String path = input.getPath() == null || input.getPath().isEmpty() ? "/" : input.getPath();
+        path = path.replaceAll("/{2,}", "/");
+        String normalizedPath = path.toLowerCase(Locale.CANADA);
+        boolean productPage = normalizedPath.startsWith("/product/");
+        boolean cannabisCategory = normalizedPath.startsWith("/product-category/cannabis");
+        boolean homepageOrSearch = "/".equals(normalizedPath);
+
+        if ((productPage || cannabisCategory) && !path.endsWith("/")) {
+            path += "/";
+        }
+
+        String query;
+        if (productPage) {
+            // Product query strings often encode the same product through cart,
+            // tracking, or variation aliases. Strip them to create one stable key.
+            query = null;
+        } else if (cannabisCategory) {
+            // Bulk Buddy's list-view and per-page parameters can return stale or
+            // partially filtered caches. Keep real pagination parameters, but fetch
+            // the clean inventory page that matches what visitors currently see.
+            query = stripCategoryDisplayParameters(input.getRawQuery());
+        } else if (homepageOrSearch) {
+            query = keepSearchParameters(input.getRawQuery());
+        } else {
+            query = null;
+        }
+
+        StringBuilder canonical = new StringBuilder(BULK_BUDDY_ORIGIN).append(path);
+        if (query != null && !query.isEmpty()) canonical.append('?').append(query);
+        URL canonicalUrl = new URL(canonical.toString());
+        validateBulkBuddyScope(canonicalUrl.toURI());
+        return canonicalUrl;
+    }
+
+    private String stripCategoryDisplayParameters(String rawQuery) {
+        if (rawQuery == null || rawQuery.isEmpty()) return null;
+        StringBuilder kept = new StringBuilder();
+        for (String part : rawQuery.split("&")) {
+            if (part == null || part.isEmpty()) continue;
+            int equals = part.indexOf('=');
+            String key = (equals >= 0 ? part.substring(0, equals) : part).toLowerCase(Locale.CANADA);
+            if ("shop_view".equals(key)
+                    || "per_page".equals(key)
+                    || "orderby".equals(key)
+                    || "add-to-cart".equals(key)
+                    || "_canshop".equals(key)) {
+                continue;
+            }
+            if (kept.length() > 0) kept.append('&');
+            kept.append(part);
+        }
+        return kept.length() == 0 ? null : kept.toString();
+    }
+
+    private String keepSearchParameters(String rawQuery) {
+        if (rawQuery == null || rawQuery.isEmpty()) return null;
+        StringBuilder kept = new StringBuilder();
+        for (String part : rawQuery.split("&")) {
+            if (part == null || part.isEmpty()) continue;
+            int equals = part.indexOf('=');
+            String key = (equals >= 0 ? part.substring(0, equals) : part).toLowerCase(Locale.CANADA);
+            if (!"term".equals(key)
+                    && !"s".equals(key)
+                    && !"post_type".equals(key)
+                    && !"taxonomy".equals(key)) {
+                continue;
+            }
+            if (kept.length() > 0) kept.append('&');
+            kept.append(part);
+        }
+        return kept.length() == 0 ? null : kept.toString();
+    }
+
+    private void validateBulkBuddyScope(URI uri) {
         String scheme = uri.getScheme();
         String host = uri.getHost();
         String path = uri.getPath() == null ? "/" : uri.getPath();
@@ -255,8 +347,6 @@ public final class MainActivity extends Activity {
         if (!productPage && !cannabisCategory && !homepageOrSearch) {
             throw new SecurityException("That Bulk Buddy page is outside the cannabis crawler scope.");
         }
-
-        return uri.toURL();
     }
 
     private void dispatchJavascript(String script) {
