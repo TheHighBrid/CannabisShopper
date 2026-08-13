@@ -112,5 +112,10 @@ function escapeCell(value: string): string {
 }
 
 function escapeText(value: string): string {
-  return value.replace(/[\r\n]+/g, ' ').trim();
+  return value
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .trim();
 }
