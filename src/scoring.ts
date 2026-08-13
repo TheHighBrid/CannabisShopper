@@ -24,7 +24,9 @@ export function scoreProducts(
   const maxPrice = validPrices.length ? Math.max(...validPrices) : Number.NaN;
 
   const scored = products.map((product) => scoreProduct(product, preferences, history, minPrice, maxPrice));
-  return applyThreeOunceVsQuarterPoundRule(scored).sort((a, b) => b.total - a.total);
+  return applyThreeOunceVsQuarterPoundRule(scored).sort(
+    (a, b) => b.total - a.total || compareProducts(a.product, b.product)
+  );
 }
 
 function scoreProduct(
@@ -44,7 +46,11 @@ function scoreProduct(
   const flavourMatch = scoreFlavour(product, preferences, history, reasons, cautions) * WEIGHTS.flavourMatch;
   const orderHistoryMatch = scoreHistory(product, history, reasons) * WEIGHTS.orderHistoryMatch;
 
-  const total = round(thcCbdRiskBalance + priceValue + transparency + reviewQualityVolume + flavourMatch + orderHistoryMatch);
+  let total = round(thcCbdRiskBalance + priceValue + transparency + reviewQualityVolume + flavourMatch + orderHistoryMatch);
+  if (product.availability.status === 'unavailable') {
+    total = round(Math.max(0, total - 25));
+    cautions.push('The listing is explicitly unavailable, so its score is reduced and it cannot enter the shortlist.');
+  }
 
   return {
     product,
@@ -60,6 +66,10 @@ function scoreProduct(
     reasons,
     cautions
   };
+}
+
+function compareProducts(a: Product, b: Product): number {
+  return (a.name.value ?? '').localeCompare(b.name.value ?? '', 'en-CA', { sensitivity: 'base' });
 }
 
 function applyThreeOunceVsQuarterPoundRule(scores: ProductScore[]): ProductScore[] {

@@ -46,6 +46,20 @@ test('scores products without allowing unavailable items onto the shortlist', ()
   assert.equal(scores.length, 1);
   assert.equal(result.shortlist.length, 0);
   assert.ok(scores[0].total >= 0 && scores[0].total <= 100);
+  assert.ok(scores[0].cautions.some(caution => caution.includes('explicitly unavailable')));
+});
+
+test('penalizes unavailable listings and uses product name as a deterministic tie-breaker', () => {
+  const products = parseProducts(
+    listingCard({ name: 'Craft Zebra 1 oz' }) + listingCard({ name: 'Craft Alpha 1 oz' })
+  );
+  const availableScore = scoreProducts([products[0]])[0].total;
+  products[0].availability = { value: null, status: 'unavailable', note: 'Sold out' };
+
+  const scores = scoreProducts(products);
+
+  assert.equal(scores[0].product.name.value, 'Craft Alpha 1 oz');
+  assert.ok(scores[1].total <= availableScore - 25);
 });
 
 test('keeps scraped line breaks from corrupting markdown output', () => {
@@ -55,4 +69,14 @@ test('keeps scraped line breaks from corrupting markdown output', () => {
   const output = formatRecommendation(buildRecommendationResult('https://example.test', products, scores));
   assert.match(output, /Craft Citrus Injected heading/);
   assert.doesNotMatch(output, /Craft Citrus\nInjected heading/);
+});
+
+test('escapes embedded HTML from listing text in markdown output', () => {
+  const products = parseProducts(listingCard());
+  products[0].name.value = 'Craft <script>alert(1)</script> & Citrus';
+  const scores = scoreProducts(products);
+  const output = formatRecommendation(buildRecommendationResult('https://example.test', products, scores));
+
+  assert.doesNotMatch(output, /<script>/);
+  assert.match(output, /Craft &lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; Citrus/);
 });
