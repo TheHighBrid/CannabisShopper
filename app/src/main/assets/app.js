@@ -50,8 +50,13 @@
     preferredFlavours: document.querySelector('#preferredFlavours'),
     availableOnly: document.querySelector('#availableOnly'),
     comparisonPackage: document.querySelector('#comparisonPackage'),
+    resultSearch: document.querySelector('#resultSearch'),
+    resultSort: document.querySelector('#resultSort'),
+    resultSummary: document.querySelector('#resultSummary'),
+    resetSearch: document.querySelector('#resetSearch'),
     results: document.querySelector('#results'),
     emptyState: document.querySelector('#emptyState'),
+    noMatchesState: document.querySelector('#noMatchesState'),
     productDialog: document.querySelector('#productDialog'),
     closeDialog: document.querySelector('#closeDialog'),
     productForm: document.querySelector('#productForm'),
@@ -83,6 +88,8 @@
     ...readWithMigration(PREFS_KEY, LEGACY_PREFS_KEYS, defaultPreferences)
   };
   let isFetching = false;
+  let resultQuery = '';
+  let resultSort = 'score';
 
   function readJson(key, fallback) {
     try {
@@ -336,14 +343,31 @@
 
   function render() {
     const ranked = getRankedProducts();
-    els.emptyState.hidden = ranked.length > 0;
-    els.results.hidden = ranked.length === 0;
+    const normalizedQuery = resultQuery.trim().toLowerCase();
+    const visible = ranked.filter(item => {
+      if (!normalizedQuery) return true;
+      return `${item.name} ${item.strainType} ${item.flavours}`.toLowerCase().includes(normalizedQuery);
+    }).sort((a, b) => {
+      if (resultSort === 'price') return (a.pricePerGram ?? Infinity) - (b.pricePerGram ?? Infinity);
+      if (resultSort === 'thc') return (average(b.thcMin, b.thcMax) ?? -1) - (average(a.thcMin, a.thcMax) ?? -1);
+      if (resultSort === 'rating') return (b.rating ?? -1) - (a.rating ?? -1) || (b.reviews ?? 0) - (a.reviews ?? 0);
+      if (resultSort === 'name') return a.name.localeCompare(b.name, 'en-CA', { sensitivity: 'base' });
+      return b.score - a.score || (a.pricePerGram ?? Infinity) - (b.pricePerGram ?? Infinity);
+    });
+    const hasProducts = ranked.length > 0;
+    els.emptyState.hidden = hasProducts;
+    els.noMatchesState.hidden = !hasProducts || visible.length > 0;
+    els.results.hidden = visible.length === 0;
+    els.resultSummary.hidden = !hasProducts;
+    els.resultSummary.textContent = normalizedQuery
+      ? `Showing ${visible.length} of ${ranked.length} saved strain${ranked.length === 1 ? '' : 's'}`
+      : `${ranked.length} saved strain${ranked.length === 1 ? '' : 's'}`;
     els.metricCount.textContent = String(ranked.length);
     els.metricBest.textContent = ranked.length ? String(ranked[0].score) : '—';
     const validValues = ranked.map(item => item.pricePerGram).filter(value => value != null);
     els.metricValue.textContent = validValues.length ? `$${Math.min(...validValues).toFixed(2)}` : '—';
 
-    els.results.innerHTML = ranked.map((item, index) => {
+    els.results.innerHTML = visible.map((item, index) => {
       const explanation = item.reasons.slice(0, 2).join(' ') || 'Ranked from the fields extracted from the product page.';
       const warning = item.cautions.length ? ` Watch-out: ${item.cautions[0]}` : '';
       return `
@@ -780,6 +804,20 @@
   els.fetchButton.addEventListener('click', refreshCatalog);
   els.addProductButton.addEventListener('click', () => els.productDialog.showModal());
   els.closeDialog.addEventListener('click', () => els.productDialog.close());
+  els.resultSearch.addEventListener('input', () => {
+    resultQuery = els.resultSearch.value;
+    render();
+  });
+  els.resultSort.addEventListener('change', () => {
+    resultSort = els.resultSort.value;
+    render();
+  });
+  els.resetSearch.addEventListener('click', () => {
+    resultQuery = '';
+    els.resultSearch.value = '';
+    els.resultSearch.focus();
+    render();
+  });
 
   els.clearButton.addEventListener('click', () => {
     products = [];
