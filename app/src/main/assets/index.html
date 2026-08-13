@@ -133,11 +133,37 @@
       <button id="clearButton" class="text-button danger-text">Clear</button>
     </section>
 
+    <section class="result-tools" aria-label="Shortlist controls">
+      <label class="search-field" for="resultSearch">
+        <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+        <span class="sr-only">Search saved strains</span>
+        <input id="resultSearch" type="search" placeholder="Search name, type, or flavour…" autocomplete="off">
+      </label>
+      <label class="sort-field" for="resultSort">
+        <span class="sr-only">Sort saved strains</span>
+        <select id="resultSort">
+          <option value="score">Best match</option>
+          <option value="price">Lowest $/g</option>
+          <option value="thc">Highest THC</option>
+          <option value="rating">Top rated</option>
+          <option value="name">Name A–Z</option>
+        </select>
+      </label>
+    </section>
+    <p id="resultSummary" class="result-summary" aria-live="polite"></p>
+
     <section id="emptyState" class="empty panel">
       <div class="empty-mark"><svg><use href="#icon-leaf"></use></svg></div>
       <span class="status-pill">Ready to scan</span>
       <h3>No fetched strains yet.</h3>
       <p>Tap “Fetch Bulk Buddy strains.” CanShop will scan all supported inventory sources and read each current craft product page automatically.</p>
+    </section>
+
+    <section id="noMatchesState" class="empty compact-empty panel" hidden>
+      <div class="empty-mark"><svg><use href="#icon-search"></use></svg></div>
+      <h3>No matching strains.</h3>
+      <p>Try a different name, type, or flavour keyword.</p>
+      <button id="resetSearch" class="secondary" type="button">Clear search</button>
     </section>
 
     <section id="results" class="results" aria-live="polite"></section>
