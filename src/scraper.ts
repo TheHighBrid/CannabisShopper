@@ -178,10 +178,26 @@ function parseRegularPrice(cardHtml: string, fallbackText: string): number | nul
 }
 
 function parsePackageSize(input: string): number | null {
-  const ounce = input.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:oz|ounce)s?\b/i);
-  if (ounce) return round(Number(ounce[1]) * 28.3495);
+  const normalizedInput = input
+    .replace(/¼/g, ' 1/4')
+    .replace(/½/g, ' 1/2')
+    .replace(/¾/g, ' 3/4');
+  const ounce = normalizedInput.match(/(?:(\d+(?:\.\d+)?)\s+)?(\d+\s*\/\s*\d+|\d+(?:\.\d+)?)\s*(?:oz|ounce)s?\b/i);
+  if (ounce) {
+    const whole = ounce[1] == null ? 0 : Number(ounce[1]);
+    const amount = ounce[2].includes('/')
+      ? parseFraction(ounce[2])
+      : Number(ounce[2]);
+    if (amount != null && whole + amount > 0) return round((whole + amount) * 28.3495);
+  }
   const grams = input.match(/([0-9]+(?:\.[0-9]+)?)\s*g(?:ram)?s?\b/i);
   return grams ? Number(grams[1]) : null;
+}
+
+function parseFraction(value: string): number | null {
+  const [numerator, denominator] = value.split('/').map((part) => Number(part.trim()));
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return null;
+  return numerator / denominator;
 }
 
 function parsePercentNearLabel(input: string, label: 'THC' | 'CBD'): number | null {
@@ -250,9 +266,18 @@ function decodeEntities(value: string): string {
     .replace(/&amp;/g, '&')
     .replace(/&#36;/g, '$')
     .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&#039;/g, "'")
     .replace(/&ndash;/g, '–')
-    .replace(/&mdash;/g, '—');
+    .replace(/&mdash;/g, '—')
+    .replace(/&#(x[0-9a-f]+|\d+);?/gi, (entity, code: string) => {
+      const value = Number.parseInt(code.replace(/^x/i, ''), code.toLowerCase().startsWith('x') ? 16 : 10);
+      return isValidCodePoint(value) ? String.fromCodePoint(value) : entity;
+    });
+}
+
+function isValidCodePoint(value: number): boolean {
+  return Number.isInteger(value) && value > 0 && value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff);
 }
 
 function absolutize(url: string | null, base: string): string {
