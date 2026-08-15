@@ -25,6 +25,27 @@ test('parses regular price and derives normalized price per gram', () => {
   assert.equal(product.availability.status, 'present');
 });
 
+test('parses fractional ounce package sizes without treating the denominator as ounces', () => {
+  const cases = [
+    ['Craft Citrus 1/2 oz', 14.17],
+    ['Craft Citrus ½ ounce', 14.17],
+    ['Craft Citrus 1 1/2 oz', 42.52]
+  ];
+
+  for (const [name, expectedGrams] of cases) {
+    const [product] = parseProducts(listingCard({ name }));
+    assert.equal(product.packageSizeGrams.value, expectedGrams, name);
+  }
+});
+
+test('decodes decimal and hexadecimal HTML entities in product names', () => {
+  const decimal = parseProducts(listingCard({ name: 'Craft Citrus &#38; Pine 1 oz' }))[0];
+  const hexadecimal = parseProducts(listingCard({ name: 'Craft Citrus &#x26; Pine 1 oz' }))[0];
+
+  assert.equal(decimal.name.value, 'Craft Citrus & Pine 1 oz');
+  assert.equal(hexadecimal.name.value, 'Craft Citrus & Pine 1 oz');
+});
+
 test('rejects impossible percentage and rating values instead of scoring them', () => {
   const [product] = parseProducts(listingCard({ thc: '127', rating: '8.4' }));
   assert.equal(product.thcPercent.value, null);
