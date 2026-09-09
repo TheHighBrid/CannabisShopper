@@ -7,6 +7,7 @@
   <meta name="color-scheme" content="dark">
   <title>CanShop</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="history.css">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true" focusable="false">
@@ -116,13 +117,50 @@
             <option value="ounce">1 Ounce</option>
           </select>
         </label>
-        <label>Target THC %<input id="targetThc" type="number" inputmode="decimal" min="0" max="45" step="0.1" value="27"></label>
-        <label>Maximum $/g<input id="maxPricePerGram" type="number" inputmode="decimal" min="0" step="0.01" value="8"></label>
-        <label class="wide">Preferred flavour words<input id="preferredFlavours" type="text" value="citrus, gas, pine, berry, diesel" placeholder="citrus, gas, pine"></label>
-        <label class="wide checkbox"><input id="availableOnly" type="checkbox" checked><span>Hide only products explicitly marked out of stock or unavailable</span></label>
+        <label>Target THC %<input id="targetThc" type="number" inputmode="decimal" min="0" max="45" step="0.1" placeholder="Optional"></label>
+        <label>Maximum $/g<input id="maxPricePerGram" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Optional"></label>
+        <label class="wide">Preferred flavour words<input id="preferredFlavours" type="text" placeholder="Optional, e.g. citrus, gas, pine"></label>
+        <label class="wide checkbox"><input id="availableOnly" type="checkbox"><span>Hide only products explicitly marked out of stock or unavailable</span></label>
         <button class="primary wide" type="submit">Apply preferences</button>
       </form>
-      <p class="policy-note">CanShop combines several public inventory pages, follows pagination, retries failed requests, and only treats a product as unavailable when the product page explicitly says so.</p>
+      <p class="policy-note">Fresh installs start with no THC, price, flavour, or availability filter applied. Saved preferences remain yours until you change them.</p>
+    </section>
+
+    <section id="history" class="panel history-panel">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">INVENTORY PULSE</p>
+          <h2>Weekly stock intelligence.</h2>
+        </div>
+        <span class="method-seal"><svg><use href="#icon-chart"></use></svg></span>
+      </div>
+      <p>Save one compact inventory snapshot per day to track availability, price movement, returning strains, and early restock patterns without sending history off-device.</p>
+
+      <div class="history-controls">
+        <label class="history-toggle"><input id="historyEnabled" type="checkbox"><span><strong>Save daily fetch logs</strong><br>After each successful fetch, update that day's local snapshot automatically.</span></label>
+        <button id="saveSnapshotButton" class="secondary" type="button">Save today</button>
+        <button id="clearHistoryButton" class="text-button danger-text" type="button">Clear history</button>
+      </div>
+      <p id="historyStatus" class="history-status" aria-live="polite">Daily logging is off.</p>
+
+      <div id="weeklySummary" class="history-summary" aria-label="Weekly inventory summary"></div>
+
+      <div class="history-subhead">
+        <div><p class="eyebrow">7-DAY VIEW</p><h3>Available strain count</h3></div>
+        <p>Missing bars mean no snapshot was saved.</p>
+      </div>
+      <div id="weeklyChart" class="weekly-chart" aria-label="Seven day availability chart"></div>
+
+      <div class="history-subhead">
+        <div><p class="eyebrow">PURCHASE SIGNALS</p><h3>What changed?</h3></div>
+      </div>
+      <div id="weeklySignals" class="history-signals"></div>
+
+      <div class="history-subhead">
+        <div><p class="eyebrow">RESTOCK FORECAST</p><h3>Observed reappearance windows.</h3></div>
+      </div>
+      <div id="restockPredictions" class="restock-predictions"></div>
+      <p class="history-footnote">Forecasts are pattern estimates from saved observations. A missing listing or failed retrieval can resemble an out-of-stock period, so treat predictions as purchasing signals rather than guarantees.</p>
     </section>
 
     <section id="resultsSection" class="section-heading results-heading">
@@ -236,9 +274,10 @@
     <a class="active" href="#home"><svg><use href="#icon-home"></use></svg><span>Home</span></a>
     <a href="#resultsSection"><svg><use href="#icon-leaf"></use></svg><span>Strains</span></a>
     <a href="#filters"><svg><use href="#icon-filter"></use></svg><span>Filters</span></a>
-    <a href="#about"><svg><use href="#icon-info"></use></svg><span>About</span></a>
+    <a href="#history"><svg><use href="#icon-chart"></use></svg><span>Trends</span></a>
   </nav>
 
+  <script src="history.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
