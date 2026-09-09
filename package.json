@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
-    "check:web": "node --check app/src/main/assets/app.js",
+    "check:web": "node --check app/src/main/assets/app.js && node --check app/src/main/assets/history.js",
     "check": "npm run typecheck && npm run test && npm run check:web"
   },
   "keywords": ["cannabis", "craft-flower", "comparison", "canada", "research", "android"],
