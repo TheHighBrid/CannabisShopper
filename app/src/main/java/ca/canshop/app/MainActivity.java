@@ -14,30 +14,33 @@ import android.webkit.WebViewClient;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
-    private static final int MAX_ATTEMPTS = 3;
-    private static final String APP_VERSION = "2.0.0";
+    private static final int MAX_ATTEMPTS = 4;
+    private static final String APP_VERSION = "2.0.1";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
+    private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 CanShop/2.0.0";
-    private static final AtomicLong REQUEST_NONCE = new AtomicLong();
+            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 CanShop/2.0.1";
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
@@ -103,6 +106,11 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void fetchBulkBuddyVariation(String requestId, String rawProductUrl, String payloadJson) {
+            networkExecutor.execute(() -> fetchVariation(requestId, rawProductUrl, payloadJson));
+        }
+
+        @JavascriptInterface
         public String appVersion() {
             return APP_VERSION;
         }
@@ -114,66 +122,59 @@ public final class MainActivity extends Activity {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 PageResponse response = fetchPageOnce(rawUrl);
-                dispatchJavascript(
-                        "window.CanShop.receivePage(" +
-                                JSONObject.quote(requestId) + "," +
-                                JSONObject.quote(response.url) + "," +
-                                JSONObject.quote(response.html) +
-                                ");"
-                );
+                dispatchPage(requestId, response.url, response.html);
                 return;
             } catch (Exception error) {
                 lastError = error;
-                if (attempt < MAX_ATTEMPTS) {
-                    try {
-                        Thread.sleep(500L * attempt);
-                    } catch (InterruptedException interrupted) {
-                        Thread.currentThread().interrupt();
-                        lastError = interrupted;
-                        break;
-                    }
-                }
+                if (!sleepBeforeRetry(attempt, MAX_ATTEMPTS)) break;
             }
         }
 
-        String message = lastError == null || lastError.getMessage() == null
-                ? "Unable to fetch the Bulk Buddy page after retries."
-                : lastError.getMessage();
-        dispatchJavascript(
-                "window.CanShop.receiveFetchError(" +
-                        JSONObject.quote(requestId) + "," +
-                        JSONObject.quote(message) +
-                        ");"
-        );
+        dispatchFetchError(requestId, errorMessage(lastError, "Unable to fetch the Bulk Buddy page after retries."));
+    }
+
+    private void fetchVariation(String requestId, String rawProductUrl, String payloadJson) {
+        Exception lastError = null;
+        final int maxAttempts = 3;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                PageResponse response = fetchVariationOnce(rawProductUrl, payloadJson);
+                dispatchPage(requestId, response.url, response.html);
+                return;
+            } catch (Exception error) {
+                lastError = error;
+                if (!sleepBeforeRetry(attempt, maxAttempts)) break;
+            }
+        }
+
+        dispatchFetchError(requestId, errorMessage(lastError, "Unable to verify the selected package after retries."));
+    }
+
+    private boolean sleepBeforeRetry(int attempt, int maxAttempts) {
+        if (attempt >= maxAttempts) return false;
+        try {
+            long delay = Math.min(5_000L, 750L * (1L << Math.max(0, attempt - 1)));
+            Thread.sleep(delay);
+            return true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private String errorMessage(Exception error, String fallback) {
+        return error == null || error.getMessage() == null ? fallback : error.getMessage();
     }
 
     private PageResponse fetchPageOnce(String rawUrl) throws Exception {
         URL canonicalUrl = validateBulkBuddyUrl(rawUrl);
-        URL requestUrl = addCacheBuster(canonicalUrl);
         HttpURLConnection connection = null;
 
         try {
-            connection = (HttpURLConnection) requestUrl.openConnection();
-            connection.setConnectTimeout(20_000);
-            connection.setReadTimeout(35_000);
-            connection.setUseCaches(false);
-            connection.setDefaultUseCaches(false);
-            // Automatic redirects can leave the allow-listed origin before the
-            // resolved URL can be validated. Canonicalizing the URL first avoids
-            // the storefront's normal host and trailing-slash redirects.
-            connection.setInstanceFollowRedirects(false);
+            connection = (HttpURLConnection) canonicalUrl.openConnection();
+            configureConnection(connection, canonicalUrl.toURI(), BULK_BUDDY_ORIGIN + "/product-category/cannabis/");
             connection.setRequestMethod("GET");
-            connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
-            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8");
-            connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
-            connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
-            connection.setRequestProperty("Pragma", "no-cache");
-            connection.setRequestProperty("Expires", "0");
-            connection.setRequestProperty("If-Modified-Since", "0");
-            connection.setRequestProperty("Referer", BULK_BUDDY_ORIGIN + "/product-category/cannabis/");
-            connection.setRequestProperty("DNT", "1");
-            connection.setRequestProperty("Connection", "keep-alive");
-            applyCookies(connection, requestUrl.toURI());
 
             int status = connection.getResponseCode();
             storeCookies(connection);
@@ -184,21 +185,106 @@ public final class MainActivity extends Activity {
             }
 
             String html = readResponse(connection.getInputStream());
-            // Return the stable canonical URL rather than the temporary cache-busted
-            // request URL. The JavaScript layer uses this value as the product key,
-            // so one product cannot appear twice through query-string or host aliases.
             return new PageResponse(canonicalUrl.toString(), html);
         } finally {
             if (connection != null) connection.disconnect();
         }
     }
 
-    private URL addCacheBuster(URL canonicalUrl) throws Exception {
-        String separator = canonicalUrl.getQuery() == null ? "?" : "&";
-        String nonce = System.currentTimeMillis() + "-" + REQUEST_NONCE.incrementAndGet();
-        URL requestUrl = new URL(canonicalUrl + separator + "_canshop=" + nonce);
-        validateBulkBuddyScope(requestUrl.toURI());
-        return requestUrl;
+    private PageResponse fetchVariationOnce(String rawProductUrl, String payloadJson) throws Exception {
+        URL productUrl = validateBulkBuddyUrl(rawProductUrl);
+        if (!productUrl.getPath().toLowerCase(Locale.CANADA).startsWith("/product/")) {
+            throw new SecurityException("Variation requests require a Bulk Buddy product page.");
+        }
+
+        String body = buildVariationForm(payloadJson);
+        URL endpoint = new URL(VARIATION_ENDPOINT);
+        validateBulkBuddyScope(endpoint.toURI());
+        HttpURLConnection connection = null;
+
+        try {
+            connection = (HttpURLConnection) endpoint.openConnection();
+            configureConnection(connection, endpoint.toURI(), productUrl.toString());
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+            connection.setRequestProperty("X-Requested-With", "XMLHttpRequest");
+            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(bodyBytes.length);
+
+            try (OutputStream output = new BufferedOutputStream(connection.getOutputStream())) {
+                output.write(bodyBytes);
+            }
+
+            int status = connection.getResponseCode();
+            storeCookies(connection);
+            if (status < 200 || status >= 300) {
+                throw new IllegalStateException(
+                        "Bulk Buddy variation endpoint returned HTTP " + status + "."
+                );
+            }
+
+            String json = readResponse(connection.getInputStream());
+            String trimmed = json.trim();
+            if (!("false".equals(trimmed) || trimmed.startsWith("{"))) {
+                throw new IllegalStateException("Bulk Buddy returned an unexpected variation response.");
+            }
+            return new PageResponse(productUrl.toString(), trimmed);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private void configureConnection(HttpURLConnection connection, URI cookieUri, String referer) throws Exception {
+        connection.setConnectTimeout(20_000);
+        connection.setReadTimeout(35_000);
+        connection.setUseCaches(false);
+        connection.setDefaultUseCaches(false);
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
+        connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8");
+        connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
+        connection.setRequestProperty("Cache-Control", "no-cache, must-revalidate, max-age=0");
+        connection.setRequestProperty("Pragma", "no-cache");
+        connection.setRequestProperty("Referer", referer);
+        connection.setRequestProperty("DNT", "1");
+        connection.setRequestProperty("Connection", "keep-alive");
+        applyCookies(connection, cookieUri);
+    }
+
+    private String buildVariationForm(String payloadJson) throws Exception {
+        JSONObject payload = new JSONObject(payloadJson == null ? "{}" : payloadJson);
+        String productId = payload.optString("product_id", "").trim();
+        if (!productId.matches("\\d+")) {
+            throw new SecurityException("Variation payload is missing a valid product id.");
+        }
+
+        StringBuilder form = new StringBuilder();
+        appendFormField(form, "product_id", productId);
+        Iterator<String> keys = payload.keys();
+        int attributeCount = 0;
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if ("product_id".equals(key)) continue;
+            if (!key.matches("attribute_[A-Za-z0-9_-]+")) {
+                throw new SecurityException("Unexpected variation attribute name.");
+            }
+            String value = payload.optString(key, "");
+            if (value.length() > 160) throw new SecurityException("Variation attribute value is too long.");
+            appendFormField(form, key, value);
+            attributeCount++;
+        }
+        if (attributeCount == 0) {
+            throw new IllegalArgumentException("Variation payload has no package attribute.");
+        }
+        return form.toString();
+    }
+
+    private void appendFormField(StringBuilder form, String key, String value) throws Exception {
+        if (form.length() > 0) form.append('&');
+        form.append(URLEncoder.encode(key, StandardCharsets.UTF_8.name()));
+        form.append('=');
+        form.append(URLEncoder.encode(value, StandardCharsets.UTF_8.name()));
     }
 
     private void applyCookies(HttpURLConnection connection, URI uri) throws Exception {
@@ -224,7 +310,6 @@ public final class MainActivity extends Activity {
         try {
             httpCookieManager.put(connection.getURL().toURI(), connection.getHeaderFields());
         } catch (Exception ignored) {
-            // Cookie persistence improves resilience but is not required to parse a page.
         }
     }
 
@@ -262,14 +347,9 @@ public final class MainActivity extends Activity {
 
         String query;
         if (productPage) {
-            // Product query strings often encode the same product through cart,
-            // tracking, or variation aliases. Strip them to create one stable key.
             query = null;
         } else if (cannabisCategory) {
-            // Bulk Buddy's list-view and per-page parameters can return stale or
-            // partially filtered caches. Keep real pagination parameters, but fetch
-            // the clean inventory page that matches what visitors currently see.
-            query = stripCategoryDisplayParameters(input.getRawQuery());
+            query = keepCategoryParameters(input.getRawQuery());
         } else if (homepageOrSearch) {
             query = keepSearchParameters(input.getRawQuery());
         } else {
@@ -283,18 +363,17 @@ public final class MainActivity extends Activity {
         return canonicalUrl;
     }
 
-    private String stripCategoryDisplayParameters(String rawQuery) {
+    private String keepCategoryParameters(String rawQuery) {
         if (rawQuery == null || rawQuery.isEmpty()) return null;
         StringBuilder kept = new StringBuilder();
         for (String part : rawQuery.split("&")) {
             if (part == null || part.isEmpty()) continue;
             int equals = part.indexOf('=');
             String key = (equals >= 0 ? part.substring(0, equals) : part).toLowerCase(Locale.CANADA);
-            if ("shop_view".equals(key)
-                    || "per_page".equals(key)
-                    || "orderby".equals(key)
-                    || "add-to-cart".equals(key)
-                    || "_canshop".equals(key)) {
+            if (!"shop_view".equals(key)
+                    && !"per_page".equals(key)
+                    && !"paged".equals(key)
+                    && !"product-page".equals(key)) {
                 continue;
             }
             if (kept.length() > 0) kept.append('&');
@@ -313,7 +392,8 @@ public final class MainActivity extends Activity {
             if (!"term".equals(key)
                     && !"s".equals(key)
                     && !"post_type".equals(key)
-                    && !"taxonomy".equals(key)) {
+                    && !"taxonomy".equals(key)
+                    && !"paged".equals(key)) {
                 continue;
             }
             if (kept.length() > 0) kept.append('&');
@@ -347,6 +427,25 @@ public final class MainActivity extends Activity {
         if (!productPage && !cannabisCategory && !homepageOrSearch) {
             throw new SecurityException("That Bulk Buddy page is outside the cannabis crawler scope.");
         }
+    }
+
+    private void dispatchPage(String requestId, String url, String body) {
+        dispatchJavascript(
+                "window.CanShop.receivePage(" +
+                        JSONObject.quote(requestId) + "," +
+                        JSONObject.quote(url) + "," +
+                        JSONObject.quote(body) +
+                        ");"
+        );
+    }
+
+    private void dispatchFetchError(String requestId, String message) {
+        dispatchJavascript(
+                "window.CanShop.receiveFetchError(" +
+                        JSONObject.quote(requestId) + "," +
+                        JSONObject.quote(message) +
+                        ");"
+        );
     }
 
     private void dispatchJavascript(String script) {
