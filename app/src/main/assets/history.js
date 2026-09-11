@@ -2,25 +2,12 @@
   'use strict';
 
   const PRODUCT_KEY = 'canshop.products.v3';
-  const PREFS_KEY = 'canshop.preferences.v3';
-  const LEGACY_PREFS_KEYS = ['canshop.preferences.v2', 'canshop.preferences.v1'];
-  const HISTORY_KEY = 'canshop.fetchHistory.v1';
+  const HISTORY_KEY = 'canshop.fetchHistory.v2';
+  const LEGACY_HISTORY_KEY = 'canshop.fetchHistory.v1';
   const HISTORY_ENABLED_KEY = 'canshop.fetchHistory.enabled.v1';
   const MAX_HISTORY_DAYS = 60;
   const DAY_MS = 86_400_000;
   const PACKAGE_GRAMS = { ounce: 28.3495, quarterPound: 113.398 };
-
-  const hasSavedPreferences = [PREFS_KEY, ...LEGACY_PREFS_KEYS].some(key => localStorage.getItem(key) != null);
-  const seededBlankPreferences = !hasSavedPreferences;
-  if (seededBlankPreferences) {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({
-      targetThc: null,
-      maxPricePerGram: null,
-      preferredFlavours: [],
-      availableOnly: false,
-      comparisonPackage: 'quarterPound'
-    }));
-  }
 
   const els = {
     enabled: document.querySelector('#historyEnabled'),
@@ -45,6 +32,12 @@
     } catch {
       return fallback;
     }
+  }
+
+  function finiteOrNull(value) {
+    if (value == null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   function normalizeDate(value) {
@@ -98,29 +91,57 @@
     return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
   }
 
+  function selectedPrice(product) {
+    const comparisonPrice = finiteOrNull(product.comparisonPrice);
+    const comparisonGrams = finiteOrNull(product.comparisonGrams);
+    if (comparisonPrice != null && comparisonGrams != null && comparisonGrams > 0) {
+      return {
+        packageKey: product.comparisonPackage === 'quarterPound' ? 'quarterPound' : 'ounce',
+        price: comparisonPrice,
+        grams: comparisonGrams,
+        pricePerGram: round(comparisonPrice / comparisonGrams, 4)
+      };
+    }
+
+    const packageKey = product.comparisonPackage === 'quarterPound' ? 'quarterPound' : 'ounce';
+    const price = packageKey === 'quarterPound'
+      ? finiteOrNull(product.quarterPoundPrice)
+      : finiteOrNull(product.oneOuncePrice);
+    const grams = PACKAGE_GRAMS[packageKey];
+    return {
+      packageKey,
+      price,
+      grams,
+      pricePerGram: price == null ? null : round(price / grams, 4)
+    };
+  }
+
   function compactProduct(product) {
     const key = product.sourceUrl || String(product.name || '').trim().toLowerCase();
     if (!key) return null;
-    const oneOuncePrice = Number.isFinite(Number(product.oneOuncePrice)) ? Number(product.oneOuncePrice) : null;
-    const quarterPoundPrice = Number.isFinite(Number(product.quarterPoundPrice)) ? Number(product.quarterPoundPrice) : null;
-    const comparisonPrice = quarterPoundPrice ?? oneOuncePrice;
-    const comparisonGrams = quarterPoundPrice != null ? PACKAGE_GRAMS.quarterPound : PACKAGE_GRAMS.ounce;
+    const pricing = selectedPrice(product);
     return {
       key,
       name: String(product.name || 'Unnamed strain').trim(),
       strainType: String(product.strainType || product.type || 'Unknown').trim(),
-      pricePerGram: comparisonPrice == null ? null : round(comparisonPrice / comparisonGrams, 4),
-      oneOuncePrice,
-      quarterPoundPrice,
-      thcMin: Number.isFinite(Number(product.thcMin)) ? Number(product.thcMin) : null,
-      thcMax: Number.isFinite(Number(product.thcMax)) ? Number(product.thcMax) : null,
+      packageKey: pricing.packageKey,
+      pricePerGram: pricing.pricePerGram,
+      packagePrice: pricing.price,
+      oneOuncePrice: finiteOrNull(product.oneOuncePrice),
+      quarterPoundPrice: finiteOrNull(product.quarterPoundPrice),
+      thcMin: finiteOrNull(product.thcMin),
+      thcMax: finiteOrNull(product.thcMax),
       sourceUrl: product.sourceUrl || null
     };
   }
 
   function readHistory() {
-    const raw = readJson(HISTORY_KEY, []);
-    if (!Array.isArray(raw)) return [];
+    let raw = readJson(HISTORY_KEY, null);
+    if (!Array.isArray(raw)) {
+      const legacy = readJson(LEGACY_HISTORY_KEY, []);
+      raw = Array.isArray(legacy) ? legacy : [];
+      if (raw.length) localStorage.setItem(HISTORY_KEY, JSON.stringify(raw));
+    }
     return raw
       .filter(entry => entry && typeof entry.date === 'string' && Array.isArray(entry.items))
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -137,7 +158,7 @@
   function captureSnapshot(source = 'manual') {
     const products = readJson(PRODUCT_KEY, []);
     if (!Array.isArray(products) || !products.length) {
-      setHistoryStatus('No fetched strains are available to save yet.', true);
+      setHistoryStatus('No verified fetched strains are available to save yet.', true);
       return false;
     }
 
@@ -150,17 +171,19 @@
     const now = new Date();
     const date = normalizeDate(now);
     const history = readHistory().filter(entry => entry.date !== date);
+    const packageKey = items[0]?.packageKey || 'ounce';
     history.push({
       date,
       capturedAt: now.toISOString(),
       source,
+      packageKey,
       count: items.length,
       items
     });
     history.sort((a, b) => a.date.localeCompare(b.date));
     writeHistory(history);
     renderReport();
-    setHistoryStatus(`Saved ${items.length} strains for ${formatDay(date, { long: true })}.`);
+    setHistoryStatus(`Saved ${items.length} verified ${packageKey === 'quarterPound' ? 'Quarter Pound' : '1 Ounce'} strains for ${formatDay(date, { long: true })}.`);
     return true;
   }
 
@@ -186,14 +209,15 @@
     const seenBefore = new Set();
     let previous = null;
 
-    for (const snapshot of history) {
+    for (let snapshotIndex = 0; snapshotIndex < history.length; snapshotIndex += 1) {
+      const snapshot = history[snapshotIndex];
       const currentMap = productMap(snapshot);
       const previousMap = productMap(previous);
       if (previous) {
         for (const [key, item] of currentMap) {
           if (!previousMap.has(key) && seenBefore.has(key)) {
             let lastSeen = null;
-            for (let index = history.indexOf(snapshot) - 1; index >= 0; index -= 1) {
+            for (let index = snapshotIndex - 1; index >= 0; index -= 1) {
               if (productMap(history[index]).has(key)) {
                 lastSeen = history[index].date;
                 break;
@@ -210,11 +234,11 @@
     return events;
   }
 
-  function historicalMedianPrice(history, key) {
+  function historicalMedianPrice(history, key, packageKey) {
     const prices = [];
     for (const snapshot of history) {
       const item = productMap(snapshot).get(key);
-      if (item?.pricePerGram != null) prices.push(item.pricePerGram);
+      if (item?.packageKey === packageKey && item?.pricePerGram != null) prices.push(item.pricePerGram);
     }
     return median(prices);
   }
@@ -223,13 +247,14 @@
     const byDate = new Map(history.map(entry => [entry.date, entry]));
     const days = lastCalendarDays(7);
     const values = days.map(day => byDate.get(day)?.count ?? null);
-    const max = Math.max(1, ...values.filter(value => value != null));
+    const finiteValues = values.filter(value => value != null);
+    const max = Math.max(1, ...finiteValues);
 
     els.chart.innerHTML = days.map((day, index) => {
       const value = values[index];
       const height = value == null ? 4 : Math.max(10, Math.round((value / max) * 100));
       const label = formatDay(day, { weekday: true });
-      return `<div class="history-bar-column" title="${value == null ? 'No snapshot' : `${value} available strains`}">
+      return `<div class="history-bar-column" title="${value == null ? 'No snapshot' : `${value} verified strains`}">
         <div class="history-bar-track">
           <span class="history-bar${value == null ? ' missing' : ''}" style="height:${height}%"></span>
         </div>
@@ -243,7 +268,7 @@
     const latest = history.at(-1);
     const previous = history.at(-2);
     if (!latest) {
-      els.signals.innerHTML = '<p class="history-empty">Save a fetch snapshot to start building purchasing signals.</p>';
+      els.signals.innerHTML = '<p class="history-empty">Save a verified fetch snapshot to start building purchasing signals.</p>';
       return;
     }
 
@@ -259,14 +284,14 @@
     const priceDrops = previous
       ? [...currentMap.values()].map(item => {
           const before = previousMap.get(item.key);
-          if (item.pricePerGram == null || before?.pricePerGram == null || item.pricePerGram >= before.pricePerGram) return null;
+          if (item.packageKey !== before?.packageKey || item.pricePerGram == null || before?.pricePerGram == null || item.pricePerGram >= before.pricePerGram) return null;
           return { ...item, drop: before.pricePerGram - item.pricePerGram, previous: before.pricePerGram };
         }).filter(Boolean).sort((a, b) => b.drop - a.drop)
       : [];
 
     const valueWatches = [...currentMap.values()].map(item => {
       if (item.pricePerGram == null) return null;
-      const historical = historicalMedianPrice(history.slice(0, -1), item.key);
+      const historical = historicalMedianPrice(history.slice(0, -1), item.key, item.packageKey);
       if (historical == null || historical <= 0) return null;
       const discount = (historical - item.pricePerGram) / historical;
       return discount >= 0.05 ? { ...item, historical, discount } : null;
@@ -286,7 +311,7 @@
       {
         title: 'Price drops',
         value: priceDrops.length,
-        detail: priceDrops.slice(0, 3).map(item => `${item.name} −$${item.drop.toFixed(2)}/g`).join(' · ') || 'No day-over-day drops'
+        detail: priceDrops.slice(0, 3).map(item => `${item.name} -$${item.drop.toFixed(2)}/g`).join(' · ') || 'No day-over-day drops'
       },
       {
         title: 'Value watch',
@@ -304,7 +329,7 @@
 
   function renderPredictions(history) {
     if (history.length < 3) {
-      els.predictions.innerHTML = '<p class="history-empty">Restock forecasting needs at least 3 saved daily snapshots. More days produce better signals.</p>';
+      els.predictions.innerHTML = '<p class="history-empty">Restock forecasting needs at least 3 verified daily snapshots. More days produce better signals.</p>';
       return;
     }
 
@@ -379,22 +404,24 @@
 
   function renderSummary(history) {
     if (!history.length) {
-      els.summary.innerHTML = '<article><strong>0</strong><span>saved days</span></article><article><strong>—</strong><span>latest inventory</span></article><article><strong>—</strong><span>weekly change</span></article>';
+      els.summary.innerHTML = '<article><strong>0</strong><span>saved days</span></article><article><strong>–</strong><span>latest inventory</span></article><article><strong>–</strong><span>weekly change</span></article><article><strong>–</strong><span>latest median $/g</span></article>';
       return;
     }
 
     const latest = history.at(-1);
     const weekAgoTarget = addDays(latest.date, -6);
-    const weekStart = history.find(entry => entry.date >= weekAgoTarget) || history[0];
+    const comparable = history.filter(entry => (entry.packageKey || entry.items?.[0]?.packageKey) === (latest.packageKey || latest.items?.[0]?.packageKey));
+    const weekStart = comparable.find(entry => entry.date >= weekAgoTarget) || comparable[0] || latest;
     const delta = latest.count - weekStart.count;
-    const prices = latest.items.map(item => item.pricePerGram).filter(value => value != null);
+    const prices = latest.items.map(item => finiteOrNull(item.pricePerGram)).filter(value => value != null);
     const medianPrice = median(prices);
+    const packageLabel = (latest.packageKey || latest.items?.[0]?.packageKey) === 'quarterPound' ? 'Quarter Pound' : '1 Ounce';
 
     els.summary.innerHTML = `
       <article><strong>${history.length}</strong><span>saved day${history.length === 1 ? '' : 's'}</span></article>
-      <article><strong>${latest.count}</strong><span>latest available</span></article>
+      <article><strong>${latest.count}</strong><span>latest ${packageLabel}</span></article>
       <article><strong>${delta > 0 ? '+' : ''}${delta}</strong><span>7-day inventory change</span></article>
-      <article><strong>${medianPrice == null ? '—' : `$${medianPrice.toFixed(2)}`}</strong><span>latest median $/g</span></article>`;
+      <article><strong>${medianPrice == null ? '–' : `$${medianPrice.toFixed(2)}`}</strong><span>latest median $/g</span></article>`;
   }
 
   function renderReport() {
@@ -406,26 +433,28 @@
 
     if (!history.length) {
       setHistoryStatus(els.enabled.checked
-        ? 'Daily logging is on. The next successful fetch will create the first snapshot.'
-        : 'Daily logging is off. Turn it on or save a snapshot manually.');
+        ? 'Daily logging is on. The next complete verified fetch will create the first snapshot.'
+        : 'Daily logging is off. Turn it on or save a verified snapshot manually.');
       return;
     }
 
     const latest = history.at(-1);
-    setHistoryStatus(`Latest snapshot: ${formatDay(latest.date, { long: true })}, ${latest.count} strains. History is stored only on this device.`);
+    const packageLabel = (latest.packageKey || latest.items?.[0]?.packageKey) === 'quarterPound' ? 'Quarter Pound' : '1 Ounce';
+    setHistoryStatus(`Latest snapshot: ${formatDay(latest.date, { long: true })}, ${latest.count} verified ${packageLabel} strains. History is stored only on this device.`);
   }
 
   els.enabled.checked = localStorage.getItem(HISTORY_ENABLED_KEY) === 'true';
   els.enabled.addEventListener('change', () => {
     localStorage.setItem(HISTORY_ENABLED_KEY, String(els.enabled.checked));
     setHistoryStatus(els.enabled.checked
-      ? 'Daily logging enabled. Successful fetches will update one local snapshot per day.'
+      ? 'Daily logging enabled. Only complete verified fetches will update the daily snapshot.'
       : 'Daily logging disabled. Existing history is preserved.');
   });
 
   els.save.addEventListener('click', () => captureSnapshot('manual'));
   els.clear.addEventListener('click', () => {
     localStorage.removeItem(HISTORY_KEY);
+    localStorage.removeItem(LEGACY_HISTORY_KEY);
     renderReport();
     setHistoryStatus('Saved fetch history cleared. Current strain results were not changed.');
   });
@@ -444,19 +473,6 @@
     readHistory,
     renderReport
   };
-
-  if (seededBlankPreferences) {
-    window.setTimeout(() => {
-      const targetThc = document.querySelector('#targetThc');
-      const maxPricePerGram = document.querySelector('#maxPricePerGram');
-      const preferredFlavours = document.querySelector('#preferredFlavours');
-      const availableOnly = document.querySelector('#availableOnly');
-      if (targetThc) targetThc.value = '';
-      if (maxPricePerGram) maxPricePerGram.value = '';
-      if (preferredFlavours) preferredFlavours.value = '';
-      if (availableOnly) availableOnly.checked = false;
-    }, 0);
-  }
 
   renderReport();
 })();
