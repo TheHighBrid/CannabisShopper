@@ -35,12 +35,13 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_ATTEMPTS = 4;
-    private static final String APP_VERSION = "2.0.1";
+    private static final int MAX_REDIRECTS = 5;
+    private static final String APP_VERSION = "2.0.2";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 CanShop/2.0.1";
+            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 CanShop/2.0.2";
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
@@ -168,27 +169,55 @@ public final class MainActivity extends Activity {
     }
 
     private PageResponse fetchPageOnce(String rawUrl) throws Exception {
-        URL canonicalUrl = validateBulkBuddyUrl(rawUrl);
-        HttpURLConnection connection = null;
+        URL currentUrl = validateBulkBuddyUrl(rawUrl);
 
-        try {
-            connection = (HttpURLConnection) canonicalUrl.openConnection();
-            configureConnection(connection, canonicalUrl.toURI(), BULK_BUDDY_ORIGIN + "/product-category/cannabis/");
-            connection.setRequestMethod("GET");
+        for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) currentUrl.openConnection();
+                configureConnection(connection, currentUrl.toURI(), BULK_BUDDY_ORIGIN + "/product-category/cannabis/");
+                connection.setRequestMethod("GET");
 
-            int status = connection.getResponseCode();
-            storeCookies(connection);
-            if (status < 200 || status >= 300) {
-                throw new IllegalStateException(
-                        "Bulk Buddy returned HTTP " + status + " for " + canonicalUrl.getPath() + "."
-                );
+                int status = connection.getResponseCode();
+                storeCookies(connection);
+
+                if (isRedirectStatus(status)) {
+                    if (redirectCount >= MAX_REDIRECTS) {
+                        throw new IllegalStateException("Bulk Buddy exceeded CanShop's redirect safety limit.");
+                    }
+                    String location = connection.getHeaderField("Location");
+                    if (location == null || location.trim().isEmpty()) {
+                        throw new IllegalStateException(
+                                "Bulk Buddy returned HTTP " + status + " without a redirect location."
+                        );
+                    }
+                    URL redirectedUrl = new URL(currentUrl, location);
+                    currentUrl = validateBulkBuddyUrl(redirectedUrl.toString());
+                    continue;
+                }
+
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException(
+                            "Bulk Buddy returned HTTP " + status + " for " + currentUrl.getPath() + "."
+                    );
+                }
+
+                String html = readResponse(connection.getInputStream());
+                return new PageResponse(currentUrl.toString(), html);
+            } finally {
+                if (connection != null) connection.disconnect();
             }
-
-            String html = readResponse(connection.getInputStream());
-            return new PageResponse(canonicalUrl.toString(), html);
-        } finally {
-            if (connection != null) connection.disconnect();
         }
+
+        throw new IllegalStateException("Bulk Buddy redirect handling ended unexpectedly.");
+    }
+
+    private boolean isRedirectStatus(int status) {
+        return status == HttpURLConnection.HTTP_MOVED_PERM
+                || status == HttpURLConnection.HTTP_MOVED_TEMP
+                || status == HttpURLConnection.HTTP_SEE_OTHER
+                || status == 307
+                || status == 308;
     }
 
     private PageResponse fetchVariationOnce(String rawProductUrl, String payloadJson) throws Exception {
@@ -336,6 +365,7 @@ public final class MainActivity extends Activity {
 
         String path = input.getPath() == null || input.getPath().isEmpty() ? "/" : input.getPath();
         path = path.replaceAll("/{2,}", "/");
+        path = path.replaceAll("(?i)/page/1/?$", "/");
         String normalizedPath = path.toLowerCase(Locale.CANADA);
         boolean productPage = normalizedPath.startsWith("/product/");
         boolean cannabisCategory = normalizedPath.startsWith("/product-category/cannabis");
@@ -370,10 +400,14 @@ public final class MainActivity extends Activity {
             if (part == null || part.isEmpty()) continue;
             int equals = part.indexOf('=');
             String key = (equals >= 0 ? part.substring(0, equals) : part).toLowerCase(Locale.CANADA);
+            String value = equals >= 0 ? part.substring(equals + 1) : "";
             if (!"shop_view".equals(key)
                     && !"per_page".equals(key)
                     && !"paged".equals(key)
                     && !"product-page".equals(key)) {
+                continue;
+            }
+            if (("paged".equals(key) || "product-page".equals(key)) && "1".equals(value)) {
                 continue;
             }
             if (kept.length() > 0) kept.append('&');
@@ -389,6 +423,7 @@ public final class MainActivity extends Activity {
             if (part == null || part.isEmpty()) continue;
             int equals = part.indexOf('=');
             String key = (equals >= 0 ? part.substring(0, equals) : part).toLowerCase(Locale.CANADA);
+            String value = equals >= 0 ? part.substring(equals + 1) : "";
             if (!"term".equals(key)
                     && !"s".equals(key)
                     && !"post_type".equals(key)
@@ -396,6 +431,7 @@ public final class MainActivity extends Activity {
                     && !"paged".equals(key)) {
                 continue;
             }
+            if ("paged".equals(key) && "1".equals(value)) continue;
             if (kept.length() > 0) kept.append('&');
             kept.append(part);
         }
