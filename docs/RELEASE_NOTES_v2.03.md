@@ -4,13 +4,13 @@ CanShop v2.03 fixes stale product-page stock responses that could make recently 
 
 ## Fixed
 
-- Adds a controlled freshness token to Bulk Buddy product-detail requests so retries do not keep receiving the same stale cached product page.
-- Keeps stored product/source URLs canonical by stripping the temporary freshness token before saving or ranking.
-- Uses a normal browser user agent and stronger no-cache/no-store request headers for product retrieval.
-- Allows only a numeric `_canshop` freshness token on Bulk Buddy product URLs inside the Android network allow-list.
-- Lets verified package-specific WooCommerce variation availability override a generic stale product-level out-of-stock marker.
-- Preserves fail-closed behavior when package availability or price still cannot be verified.
+- Adds a short-lived freshness token internally to Bulk Buddy product-detail GETs so retries do not keep receiving the same stale cached product page.
+- Generates a new freshness token on each network attempt and after validated product-page redirects.
+- Keeps the URL returned to the web app canonical, so temporary cache-busting parameters never enter saved products, ranking keys, or trend history.
+- Uses a normal browser user agent instead of a custom cache-varying suffix.
+- Strengthens request revalidation with `no-cache`, `no-store`, `must-revalidate`, `Expires: 0`, and an epoch `If-Modified-Since` header.
+- Preserves the existing HTTPS, Bulk Buddy host, redirect, cannabis-path, package-availability, and fail-closed protections.
 
 ## Regression reproduced
 
-The craft listing contained 9 candidate pages. CanShop v2.02 returned 6, excluding Pink Pussy and Purple Dank Breath as sold out even though the listing showed them active. One other product, Pink Wagyu, legitimately lacked the selected 1 Ounce package. The expected verified shortlist is therefore 8.
+The craft listing contained 9 candidate pages. CanShop v2.02 returned 6, excluding Pink Pussy and Purple Dank Breath as sold out even though the current listing showed them active. One other product, Pink Wagyu, legitimately lacked the selected 1 Ounce package. The expected verified shortlist is therefore 8 when the current product pages confirm those two restocked strains.

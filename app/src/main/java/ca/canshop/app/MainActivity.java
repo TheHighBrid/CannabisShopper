@@ -36,12 +36,12 @@ public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_ATTEMPTS = 4;
     private static final int MAX_REDIRECTS = 5;
-    private static final String APP_VERSION = "2.0.2";
+    private static final String APP_VERSION = "2.0.3";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 CanShop/2.0.2";
+            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
@@ -168,8 +168,21 @@ public final class MainActivity extends Activity {
         return error == null || error.getMessage() == null ? fallback : error.getMessage();
     }
 
+    private boolean isProductUrl(URL url) {
+        return url != null && url.getPath() != null
+                && url.getPath().toLowerCase(Locale.CANADA).startsWith("/product/");
+    }
+
+    private URL withFreshProductToken(URL canonicalUrl) throws Exception {
+        if (!isProductUrl(canonicalUrl)) return canonicalUrl;
+        String separator = canonicalUrl.getQuery() == null ? "?" : "&";
+        return new URL(canonicalUrl.toString() + separator + "_canshop=" + System.currentTimeMillis());
+    }
+
     private PageResponse fetchPageOnce(String rawUrl) throws Exception {
-        URL currentUrl = validateBulkBuddyUrl(rawUrl);
+        URL canonicalRequestUrl = validateBulkBuddyUrl(rawUrl);
+        boolean productRequest = isProductUrl(canonicalRequestUrl);
+        URL currentUrl = productRequest ? withFreshProductToken(canonicalRequestUrl) : canonicalRequestUrl;
 
         for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
             HttpURLConnection connection = null;
@@ -192,7 +205,10 @@ public final class MainActivity extends Activity {
                         );
                     }
                     URL redirectedUrl = new URL(currentUrl, location);
-                    currentUrl = validateBulkBuddyUrl(redirectedUrl.toString());
+                    URL validatedRedirect = validateBulkBuddyUrl(redirectedUrl.toString());
+                    currentUrl = productRequest && isProductUrl(validatedRedirect)
+                            ? withFreshProductToken(validatedRedirect)
+                            : validatedRedirect;
                     continue;
                 }
 
@@ -203,7 +219,8 @@ public final class MainActivity extends Activity {
                 }
 
                 String html = readResponse(connection.getInputStream());
-                return new PageResponse(currentUrl.toString(), html);
+                URL responseUrl = validateBulkBuddyUrl(currentUrl.toString());
+                return new PageResponse(responseUrl.toString(), html);
             } finally {
                 if (connection != null) connection.disconnect();
             }
@@ -222,7 +239,7 @@ public final class MainActivity extends Activity {
 
     private PageResponse fetchVariationOnce(String rawProductUrl, String payloadJson) throws Exception {
         URL productUrl = validateBulkBuddyUrl(rawProductUrl);
-        if (!productUrl.getPath().toLowerCase(Locale.CANADA).startsWith("/product/")) {
+        if (!isProductUrl(productUrl)) {
             throw new SecurityException("Variation requests require a Bulk Buddy product page.");
         }
 
@@ -273,8 +290,10 @@ public final class MainActivity extends Activity {
         connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
         connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8");
         connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
-        connection.setRequestProperty("Cache-Control", "no-cache, must-revalidate, max-age=0");
+        connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
         connection.setRequestProperty("Pragma", "no-cache");
+        connection.setRequestProperty("Expires", "0");
+        connection.setRequestProperty("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT");
         connection.setRequestProperty("Referer", referer);
         connection.setRequestProperty("DNT", "1");
         connection.setRequestProperty("Connection", "keep-alive");
