@@ -11,34 +11,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch whole flower page
-        shell: bash
+      - name: Fetch and inspect whole flower page
         run: |
-          set -euxo pipefail
-          curl -L --compressed --max-time 45 \
-            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139 Safari/537.36' \
-            -H 'Accept-Language: en-CA,en;q=0.9' \
-            'https://cannacabana.com/collections/whole-flower?sID=3658' \
-            -o canna.html
-          wc -c canna.html
-          echo '--- TITLES / KNOWN PRODUCTS ---'
-          grep -Eio 'Cherry Tang|Ice Cream Rntz|Lemon Gelato|Pink Pussy|Purple Dank|28 G|29\.97|34\.97|Elite|Market|THC|iframe' canna.html | sort | uniq -c | head -100 || true
-          echo '--- SCRIPT / IFRAME SOURCES ---'
-          grep -Eo '<(script|iframe)[^>]+(src|data-src)=["'"'][^"'"']+' canna.html | head -80 || true
-          echo '--- PRODUCT-LIKE DATA ATTRS ---'
-          grep -Eo 'data-[A-Za-z0-9_-]+=["'"'][^"'"']{0,180}["'"']' canna.html | grep -Ei 'product|price|thc|size|store|variant' | head -120 || true
-          echo '--- KNOWN CONTEXT ---'
           python - <<'PY'
-from pathlib import Path
-s=Path('canna.html').read_text(errors='ignore')
-for needle in ['Cherry Tang','Ice Cream Rntz','Lemon Gelato','THC','Elite','sID','3658','iframe']:
-    i=s.lower().find(needle.lower())
-    print('\n###', needle, 'index', i)
-    if i>=0:
-        print(s[max(0,i-700):i+1700])
-PY
-      - name: Upload probe HTML
-        uses: actions/upload-artifact@v4
+          import re
+          import urllib.request
+          url = 'https://cannacabana.com/collections/whole-flower?sID=3658'
+          req = urllib.request.Request(url, headers={
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139 Safari/537.36',
+              'Accept-Language': 'en-CA,en;q=0.9',
+          })
+          with urllib.request.urlopen(req, timeout=45) as r:
+              body = r.read().decode('utf-8', 'ignore')
+              print('STATUS', r.status)
+              print('FINAL_URL', r.geturl())
+          open('canna.html','w',encoding='utf-8').write(body)
+          print('BYTES', len(body.encode()))
+          for needle in ['Cherry Tang','Ice Cream Rntz','Lemon Gelato','Pink Pussy','Purple Dank','28 G','29.97','34.97','Elite','Market','THC','iframe','3658']:
+              print('COUNT', needle, body.lower().count(needle.lower()))
+          print('SCRIPT_IFRAME_SOURCES')
+          for m in re.finditer(r'<(?:script|iframe)[^>]+(?:src|data-src)=["\\\']([^"\\\']+)', body, re.I):
+              print(m.group(1))
+          print('KNOWN_CONTEXT')
+          for needle in ['Cherry Tang','Elite','THC','iframe','3658']:
+              i = body.lower().find(needle.lower())
+              print('---', needle, i)
+              if i >= 0:
+                  print(body[max(0,i-600):i+1600].replace('\\n',' ')[:2200])
+          PY
+      - uses: actions/upload-artifact@v4
         with:
           name: canna-probe-html
           path: canna.html
