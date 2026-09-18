@@ -600,16 +600,16 @@
     const text = normalizeText(card.textContent || '');
     const classText = String(card.className || '');
     const explicitlySoldOut =
-      /(?:^|\\s)outofstock(?:\\s|$)/i.test(classText) ||
+      /(?:^|\s)outofstock(?:\s|$)/i.test(classText) ||
       Boolean(card.querySelector('.stock.out-of-stock, .outofstock')) ||
-      /\\bout of stock\\b|\\bsold out\\b/i.test(text);
+      /\bout of stock\b|\bsold out\b/i.test(text);
     if (explicitlySoldOut) return false;
 
     const activePurchaseSignal =
       Boolean(card.querySelector(
         'a.add_to_cart_button, a.product_type_variable, a[href*="/product/"], button, .button'
       )) &&
-      (/select options|add to cart|choose options|\\$\\s*[0-9]/i.test(text) ||
+      (/select options|add to cart|choose options|\$\s*[0-9]/i.test(text) ||
         Boolean(card.querySelector('.price, .woocommerce-Price-amount')));
 
     return activePurchaseSignal ? true : null;
@@ -630,7 +630,7 @@
           'li.product, .type-product, article.product, .product-grid-item, .product-wrapper, .product'
         );
         const context = normalizeText(`${anchor.textContent || ''} ${card?.textContent || ''} ${url.pathname}`);
-        if (!/\\bcraft\\b/i.test(context)) continue;
+        if (!/\bcraft\b/i.test(context)) continue;
 
         const canonical = canonicalUrl(url.href);
         const available = listingAvailability(card);
@@ -803,7 +803,7 @@
       form.querySelector('[name="add-to-cart"]')?.value ||
       ''
     );
-    if (!/^\\d+$/.test(productId)) return { state: 'unknown', payload: null };
+    if (!/^\d+$/.test(productId)) return { state: 'unknown', payload: null };
 
     const selects = [...form.querySelectorAll('select[name^="attribute_"]')];
     if (!selects.length) return { state: 'unknown', payload: null };
@@ -822,7 +822,7 @@
 
     if (!target || !targetOption) {
       const weightSelect = selects.find(select => [...select.options].some(option =>
-        /ounce|quarter|pound|grams?|\\boz\\b/i.test(`${option.value} ${option.textContent}`)
+        /ounce|quarter|pound|grams?|\boz\b/i.test(`${option.value} ${option.textContent}`)
       ));
       return weightSelect ? { state: 'unavailable', payload: null } : { state: 'unknown', payload: null };
     }
@@ -859,20 +859,20 @@
       documentFromHtml.querySelector('form.cart [name="product_id"]')?.value ||
       ''
     );
-    if (/^\\d+$/.test(formProductId)) return formProductId;
+    if (/^\d+$/.test(formProductId)) return formProductId;
 
     const bodyClass = String(documentFromHtml.body?.className || '');
-    const bodyMatch = bodyClass.match(/(?:^|\\s)postid-(\\d+)(?:\\s|$)/i);
+    const bodyMatch = bodyClass.match(/(?:^|\s)postid-(\d+)(?:\s|$)/i);
     if (bodyMatch) return bodyMatch[1];
 
     const summaryProductId = normalizeText(
       documentFromHtml.querySelector('.summary [data-product_id]')?.getAttribute('data-product_id') ||
       ''
     );
-    if (/^\\d+$/.test(summaryProductId)) return summaryProductId;
+    if (/^\d+$/.test(summaryProductId)) return summaryProductId;
 
     const htmlMatch = String(html || '').match(
-      /["']product_id["']\\s*:\\s*["']?(\\d+)/i
+      /["']product_id["']\s*:\s*["']?(\d+)/i
     );
     return htmlMatch?.[1] || null;
   }
@@ -968,7 +968,7 @@
     );
 
     if (!name) return null;
-    const craftSignal = /\\bcraft\\b/i.test(name) || /Craft Cannabis Flowers/i.test(categoryText);
+    const craftSignal = /\bcraft\b/i.test(name) || /Craft Cannabis Flowers/i.test(categoryText);
     if (!craftSignal) return null;
     if (EXCLUDED_TERMS.some(term => `${name} ${categoryText}`.toLowerCase().includes(term))) return null;
 
@@ -983,28 +983,28 @@
       || documentFromHtml.querySelector('.woocommerce-product-rating .star-rating strong')?.textContent
       || documentFromHtml.querySelector('[aria-label*="Rated"]')?.getAttribute('aria-label')
       || summaryText;
-    const rating = parseNumber(ratingSource, /Rated\\s+([0-9.]+)\\s+out of 5/i)
-      ?? parseNumber(ratingSource, /([0-9.]+)\\s*(?:\\/\\s*5)?/i);
+    const rating = parseNumber(ratingSource, /Rated\s+([0-9.]+)\s+out of 5/i)
+      ?? parseNumber(ratingSource, /([0-9.]+)\s*(?:\/\s*5)?/i);
 
     const reviewSource =
       documentFromHtml.querySelector('[itemprop="reviewCount"]')?.getAttribute('content')
       || documentFromHtml.querySelector('.woocommerce-review-link')?.textContent
       || summaryText;
-    const reviews = parseNumber(reviewSource, /based on\\s+([0-9,]+)\\s+customer ratings?/i)
-      ?? parseNumber(reviewSource, /([0-9,]+)\\s+(?:customer\\s+)?(?:ratings?|reviews?)/i)
-      ?? parseNumber(reviewSource, /\\(([0-9,]+)\\s+(?:customer\\s+)?reviews?\\)/i);
+    const reviews = parseNumber(reviewSource, /based on\s+([0-9,]+)\s+customer ratings?/i)
+      ?? parseNumber(reviewSource, /([0-9,]+)\s+(?:customer\s+)?(?:ratings?|reviews?)/i)
+      ?? parseNumber(reviewSource, /\(([0-9,]+)\s+(?:customer\s+)?reviews?\)/i);
 
     const flavours = parseLabelValue(summaryText, 'Flavou?r', ['Medical Usage', 'THC', 'CBD', 'Batch', 'Price']);
-    const thcRange = summaryText.match(/THC\\s*:\\s*([0-9.]+)\\s*[–-]\\s*([0-9.]+)\\+?\\s*%/i);
-    const thcSingle = summaryText.match(/THC\\s*:\\s*([0-9.]+)\\+?\\s*%/i);
+    const thcRange = summaryText.match(/THC\s*:\s*([0-9.]+)\s*[–-]\s*([0-9.]+)\+?\s*%/i);
+    const thcSingle = summaryText.match(/THC\s*:\s*([0-9.]+)\+?\s*%/i);
     const thcMin = numberOrNull(thcRange?.[1] ?? thcSingle?.[1]);
     const thcMax = numberOrNull(thcRange?.[2] ?? thcSingle?.[1]);
     const thcDisplay = thcRange
-      ? `${thcRange[1]} – ${thcRange[2]}${/\\+\\s*%/.test(thcRange[0]) ? '+' : ''}%`
-      : (thcSingle ? `${thcSingle[1]}${/\\+\\s*%/.test(thcSingle[0]) ? '+' : ''}%` : '');
-    const cbdDisplay = normalizeText(summaryText.match(/CBD\\s*:\\s*([<>≤≥]?\\s*[0-9.]+\\+?\\s*%)/i)?.[1] || '');
-    const batch = normalizeText(summaryText.match(/Batch\\s*:\\s*([A-Za-z]+\\s+\\d{1,2}[,.]?\\s+\\d{4})/i)?.[1] || '');
-    const strainType = normalizeText(`${name} ${categoryText}`.match(/\\b(Indica|Sativa|Hybrid)\\b/i)?.[1] || 'Unknown');
+      ? `${thcRange[1]} – ${thcRange[2]}${/\+\s*%/.test(thcRange[0]) ? '+' : ''}%`
+      : (thcSingle ? `${thcSingle[1]}${/\+\s*%/.test(thcSingle[0]) ? '+' : ''}%` : '');
+    const cbdDisplay = normalizeText(summaryText.match(/CBD\s*:\s*([<>≤≥]?\s*[0-9.]+\+?\s*%)/i)?.[1] || '');
+    const batch = normalizeText(summaryText.match(/Batch\s*:\s*([A-Za-z]+\s+\d{1,2}[,.]?\s+\d{4})/i)?.[1] || '');
+    const strainType = normalizeText(`${name} ${categoryText}`.match(/\b(Indica|Sativa|Hybrid)\b/i)?.[1] || 'Unknown');
     const prices = extractVariationPrices(documentFromHtml, html);
 
     const allowFallback = listingAvailable === true;
