@@ -595,9 +595,29 @@
     }
   }
 
+  function listingAvailability(card) {
+    if (!card) return null;
+    const text = normalizeText(card.textContent || '');
+    const classText = String(card.className || '');
+    const explicitlySoldOut =
+      /(?:^|\s)outofstock(?:\s|$)/i.test(classText) ||
+      Boolean(card.querySelector('.stock.out-of-stock, .outofstock')) ||
+      /\bout of stock\b|\bsold out\b/i.test(text);
+    if (explicitlySoldOut) return false;
+
+    const activePurchaseSignal =
+      Boolean(card.querySelector(
+        'a.add_to_cart_button, a.product_type_variable, a[href*="/product/"], button, .button'
+      )) &&
+      (/select options|add to cart|choose options|\$\s*[0-9]/i.test(text) ||
+        Boolean(card.querySelector('.price, .woocommerce-Price-amount')));
+
+    return activePurchaseSignal ? true : null;
+  }
+
   function discoverLinks(html, baseUrl) {
     const documentFromHtml = new DOMParser().parseFromString(html, 'text/html');
-    const productLinks = new Set();
+    const productEntries = new Map();
     const paginationLinks = new Set();
     const anchors = [...documentFromHtml.querySelectorAll('a[href*="/product/"]')];
 
@@ -606,9 +626,28 @@
         const url = new URL(anchor.getAttribute('href'), baseUrl);
         url.hash = '';
         if (!isBulkBuddyProductUrl(url.href)) continue;
-        const card = anchor.closest('li.product, .type-product, article.product, .product-grid-item, .product-wrapper');
+        const card = anchor.closest(
+          'li.product, .type-product, article.product, .product-grid-item, .product-wrapper, .product'
+        );
         const context = normalizeText(`${anchor.textContent || ''} ${card?.textContent || ''} ${url.pathname}`);
-        if (/\bcraft\b/i.test(context)) productLinks.add(canonicalUrl(url.href));
+        if (!/\bcraft\b/i.test(context)) continue;
+
+        const canonical = canonicalUrl(url.href);
+        const available = listingAvailability(card);
+        const name = normalizeText(
+          card?.querySelector('h2, h3, .woocommerce-loop-product__title, .product-title')?.textContent ||
+          anchor.textContent ||
+          ''
+        );
+        const existing = productEntries.get(canonical);
+        productEntries.set(canonical, {
+          url: canonical,
+          name: name || existing?.name || '',
+          available: available === true
+            ? true
+            : (existing?.available === true ? true : (available === false || existing?.available === false ? false : null)),
+          listingText: normalizeText(card?.textContent || existing?.listingText || '')
+        });
       } catch {
       }
     }
@@ -624,7 +663,11 @@
       }
     }
 
-    return { productLinks: [...productLinks], paginationLinks: [...paginationLinks] };
+    return {
+      productLinks: [...productEntries.keys()],
+      productEntries: [...productEntries.values()],
+      paginationLinks: [...paginationLinks]
+    };
   }
 
   function parseNumber(text, regex) {
@@ -810,36 +853,109 @@
     };
   }
 
-  async function resolvePackageViaAjax(documentFromHtml, sourceUrl, packageKey, result) {
+  function extractFallbackProductId(documentFromHtml, html) {
+    const formProductId = normalizeText(
+      documentFromHtml.querySelector('form.variations_form')?.getAttribute('data-product_id') ||
+      documentFromHtml.querySelector('form.cart [name="product_id"]')?.value ||
+      ''
+    );
+    if (/^\d+$/.test(formProductId)) return formProductId;
+
+    const bodyClass = String(documentFromHtml.body?.className || '');
+    const bodyMatch = bodyClass.match(/(?:^|\s)postid-(\d+)(?:\s|$)/i);
+    if (bodyMatch) return bodyMatch[1];
+
+    const summaryProductId = normalizeText(
+      documentFromHtml.querySelector('.summary [data-product_id]')?.getAttribute('data-product_id') ||
+      ''
+    );
+    if (/^\d+$/.test(summaryProductId)) return summaryProductId;
+
+    const htmlMatch = String(html || '').match(
+      /["']product_id["']\s*:\s*["']?(\d+)/i
+    );
+    return htmlMatch?.[1] || null;
+  }
+
+  function fallbackVariationPayloads(documentFromHtml, html, packageKey) {
+    const productId = extractFallbackProductId(documentFromHtml, html);
+    if (!productId) return [];
+
+    const attributeNames = new Set();
+    for (const select of documentFromHtml.querySelectorAll('select[name^="attribute_"]')) {
+      if (/weight/i.test(select.name)) attributeNames.add(select.name);
+    }
+    for (const match of String(html || '').matchAll(/attribute_([a-z0-9_-]*weight[a-z0-9_-]*)/gi)) {
+      attributeNames.add(`attribute_${match[1]}`);
+    }
+    if (!attributeNames.size) {
+      attributeNames.add('attribute_weight');
+      attributeNames.add('attribute_pa_weight');
+    }
+
+    const values = packageKey === 'ounce'
+      ? ['1-ounce', '1-oz', '28-grams', '28g']
+      : ['quarter-pound', '1-4-pound', '4-oz', '112-grams'];
+
+    const payloads = [];
+    for (const attributeName of attributeNames) {
+      for (const value of values) {
+        payloads.push({ product_id: productId, [attributeName]: value });
+      }
+    }
+    return payloads.slice(0, 8);
+  }
+
+  async function resolvePackageViaAjax(documentFromHtml, sourceUrl, packageKey, result, allowFallback = false) {
     const priceKey = packageKey === 'ounce' ? 'oneOuncePrice' : 'quarterPoundPrice';
     const regularKey = packageKey === 'ounce' ? 'oneOunceRegularPrice' : 'quarterPoundRegularPrice';
     const availableKey = packageKey === 'ounce' ? 'oneOunceAvailable' : 'quarterPoundAvailable';
     if (result[availableKey] !== null && (result[availableKey] === false || result[priceKey] != null)) return;
 
-    const request = findVariationRequest(documentFromHtml, packageKey);
-    if (request.state === 'unavailable') {
-      result[availableKey] = false;
-      return;
-    }
-    if (request.state !== 'request' || !request.payload) return;
-
-    const variation = await variationWithRetry(sourceUrl, request.payload);
-    if (variation === false || variation == null || typeof variation !== 'object') {
-      result[availableKey] = false;
-      return;
+    const direct = findVariationRequest(documentFromHtml, packageKey);
+    const payloads = [];
+    if (direct.state === 'request' && direct.payload) payloads.push(direct.payload);
+    if (allowFallback && direct.state !== 'request') {
+      payloads.push(...fallbackVariationPayloads(documentFromHtml, documentFromHtml.documentElement?.outerHTML || '', packageKey));
     }
 
-    const available = variation.variation_is_active !== false
-      && variation.is_in_stock !== false
-      && variation.is_purchasable !== false;
-    result[availableKey] = available;
-    const current = numberOrNull(variation.display_price ?? variation.price);
-    const regular = numberOrNull(variation.display_regular_price ?? variation.regular_price);
-    if (available && current != null) result[priceKey] = current;
-    if (regular != null) result[regularKey] = regular;
+    if (!payloads.length) {
+      if (direct.state === 'unavailable' && !allowFallback) result[availableKey] = false;
+      return;
+    }
+
+    const seen = new Set();
+
+    for (const payload of payloads) {
+      const signature = JSON.stringify(payload);
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      try {
+        const variation = await variationWithRetry(sourceUrl, payload, direct.state === 'request' ? 3 : 1);
+        if (variation === false || variation == null || typeof variation !== 'object') continue;
+
+        const available = variation.variation_is_active !== false
+          && variation.is_in_stock !== false
+          && variation.is_purchasable !== false;
+        const current = numberOrNull(variation.display_price ?? variation.price);
+        const regular = numberOrNull(variation.display_regular_price ?? variation.regular_price);
+
+        if (!available || current == null) continue;
+
+        result[availableKey] = true;
+        result[priceKey] = current;
+        if (regular != null) result[regularKey] = regular;
+        return;
+      } catch {
+      }
+    }
+
+    // A guessed fallback payload returning false is not proof that the package is unavailable.
+    // Leave the state unknown so the selected-package integrity check fails closed instead of
+    // silently dropping a potentially valid strain.
   }
 
-  async function parseProductPage(html, sourceUrl) {
+  async function parseProductPage(html, sourceUrl, listingEvidence = null) {
     const documentFromHtml = new DOMParser().parseFromString(html, 'text/html');
     const bodyText = normalizeText(documentFromHtml.body?.textContent || '');
     const summaryNode = documentFromHtml.querySelector('.summary, .product-summary-wrap, .entry-summary');
@@ -860,6 +976,7 @@
       summaryNode?.querySelector('.stock.out-of-stock, .outofstock') ||
       documentFromHtml.querySelector('.summary .stock.out-of-stock, .summary.outofstock')
     ) || /currently out of stock|this product is out of stock|sold out/i.test(summaryText);
+    const listingAvailable = booleanOrNull(listingEvidence?.available);
 
     const ratingSource =
       documentFromHtml.querySelector('[itemprop="ratingValue"]')?.getAttribute('content')
@@ -890,10 +1007,29 @@
     const strainType = normalizeText(`${name} ${categoryText}`.match(/\b(Indica|Sativa|Hybrid)\b/i)?.[1] || 'Unknown');
     const prices = extractVariationPrices(documentFromHtml, html);
 
-    if (!explicitUnavailable) {
-      await resolvePackageViaAjax(documentFromHtml, sourceUrl, 'ounce', prices);
-      await resolvePackageViaAjax(documentFromHtml, sourceUrl, 'quarterPound', prices);
+    const allowFallback = listingAvailable === true;
+    if (allowFallback || !explicitUnavailable) {
+      await resolvePackageViaAjax(
+        documentFromHtml,
+        sourceUrl,
+        'ounce',
+        prices,
+        allowFallback && preferences.comparisonPackage === 'ounce'
+      );
+      await resolvePackageViaAjax(
+        documentFromHtml,
+        sourceUrl,
+        'quarterPound',
+        prices,
+        allowFallback && preferences.comparisonPackage === 'quarterPound'
+      );
     }
+
+    const verifiedPackageAvailable =
+      prices.oneOunceAvailable === true || prices.quarterPoundAvailable === true;
+    const available = listingAvailable === true
+      ? true
+      : (listingAvailable === false ? false : (verifiedPackageAvailable ? true : !explicitUnavailable));
 
     return normalizeProduct({
       name,
@@ -907,8 +1043,8 @@
       cbdDisplay,
       batch,
       ...prices,
-      available: !explicitUnavailable,
-      source: 'bulkbuddy-product-page',
+      available,
+      source: listingAvailable === true ? 'bulkbuddy-current-listing+product-page' : 'bulkbuddy-product-page',
       sourceUrl,
       fetchedAt: new Date().toISOString()
     });
@@ -919,6 +1055,7 @@
     const queuedPages = new Set(DISCOVERY_SEEDS.map(canonicalUrl));
     const queue = [...queuedPages];
     const productUrls = new Set();
+    const productEvidence = new Map();
     const failedPages = [];
 
     while (queue.length && visitedPages.size < MAX_DISCOVERY_PAGES) {
@@ -931,6 +1068,16 @@
         const response = await requestWithRetry(pageUrl);
         const discovered = discoverLinks(response.html, response.url);
         discovered.productLinks.forEach(url => productUrls.add(url));
+        discovered.productEntries.forEach(entry => {
+          const existing = productEvidence.get(entry.url);
+          productEvidence.set(entry.url, {
+            ...existing,
+            ...entry,
+            available: entry.available === true
+              ? true
+              : (existing?.available === true ? true : (entry.available === false || existing?.available === false ? false : null))
+          });
+        });
         discovered.paginationLinks.forEach(url => {
           if (!visitedPages.has(url) && !queuedPages.has(url)) {
             queuedPages.add(url);
@@ -944,6 +1091,7 @@
 
     return {
       urls: [...productUrls].sort().slice(0, MAX_PRODUCT_PAGES),
+      evidence: productEvidence,
       visitedPages: visitedPages.size,
       failedPages
     };
@@ -985,7 +1133,11 @@
         setStatus(`Verifying product ${index + 1} of ${discovery.urls.length}… ${accepted.length} eligible ${PACKAGE_LABELS[preferences.comparisonPackage]} strains confirmed.`);
         try {
           const response = await requestWithRetry(url);
-          const product = await parseProductPage(response.html, response.url);
+          const product = await parseProductPage(
+            response.html,
+            response.url,
+            discovery.evidence.get(url) || null
+          );
           if (!product) {
             skippedNonCraft += 1;
             continue;
