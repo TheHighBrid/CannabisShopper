@@ -292,10 +292,7 @@
 
   function isEligibleForSelectedPackage(product) {
     const available = selectedPackageAvailability(product);
-    const price = preferences.comparisonPackage === 'quarterPound'
-      ? product.quarterPoundPrice
-      : product.oneOuncePrice;
-    return product.available && available === true && price != null;
+    return product.available && available === true;
   }
 
   function transparency(product) {
@@ -718,6 +715,34 @@
       embeddedVariationPayload: false
     };
   }
+  function packageOptionPresence(documentFromHtml, packageKey) {
+    let sawWeightDefinition = false;
+
+    for (const select of documentFromHtml.querySelectorAll('select[name^="attribute_"]')) {
+      const options = [...select.options].filter(option => option.value || normalizeText(option.textContent || ''));
+      const optionText = options.map(option => `${option.value} ${option.textContent || ''}`).join(' ');
+      const descriptor = `${select.name || ''} ${select.id || ''} ${select.className || ''} ${optionText}`;
+      if (!/weight|ounce|quarter|pound|grams?|\boz\b/i.test(descriptor)) continue;
+      sawWeightDefinition = true;
+      if (options.some(option => variationMatches(`${option.value} ${option.textContent || ''}`, packageKey))) {
+        return true;
+      }
+    }
+
+    for (const row of documentFromHtml.querySelectorAll(
+      '.woocommerce-product-attributes-item, table.woocommerce-product-attributes tr, .shop_attributes tr'
+    )) {
+      const label = normalizeText(
+        row.querySelector('th, .woocommerce-product-attributes-item__label')?.textContent || ''
+      );
+      if (!/weight/i.test(label)) continue;
+      sawWeightDefinition = true;
+      if (variationMatches(normalizeText(row.textContent || ''), packageKey)) return true;
+    }
+
+    return sawWeightDefinition ? false : null;
+  }
+
 
   function applyVariation(result, variation, label) {
     const current = numberOrNull(variation?.display_price ?? variation?.price);
@@ -1025,6 +1050,15 @@
       );
     }
 
+    const selectedPackageKey = preferences.comparisonPackage === 'quarterPound' ? 'quarterPound' : 'ounce';
+    const selectedAvailabilityKey = selectedPackageKey === 'quarterPound'
+      ? 'quarterPoundAvailable'
+      : 'oneOunceAvailable';
+    if (listingAvailable === true && prices[selectedAvailabilityKey] === null) {
+      const optionPresence = packageOptionPresence(documentFromHtml, selectedPackageKey);
+      if (optionPresence !== null) prices[selectedAvailabilityKey] = optionPresence;
+    }
+
     const verifiedPackageAvailable =
       prices.oneOunceAvailable === true || prices.quarterPoundAvailable === true;
     const available = listingAvailable === true
@@ -1100,9 +1134,7 @@
   function selectedPackageIssue(product) {
     const key = preferences.comparisonPackage;
     const available = key === 'ounce' ? product.oneOunceAvailable : product.quarterPoundAvailable;
-    const price = key === 'ounce' ? product.oneOuncePrice : product.quarterPoundPrice;
     if (available === null) return 'unknown availability';
-    if (available === true && price == null) return 'missing price';
     return null;
   }
 
