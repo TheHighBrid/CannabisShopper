@@ -23,6 +23,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Iterator;
@@ -39,6 +40,9 @@ public final class MainActivity extends Activity {
     private static final String APP_VERSION = "2.0.6";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
+    private static final String CANNA_CABANA_API_ORIGIN = "https://app.cannacabana.com";
+    private static final String CANNA_CABANA_COLLECTION_URL =
+            "https://cannacabana.com/collections/whole-flower?sID=3658";
     private static final String BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
@@ -112,6 +116,11 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void fetchCannaCabanaPage(String requestId, String rawUrl) {
+            networkExecutor.execute(() -> fetchCannaCabanaPage(requestId, rawUrl));
+        }
+
+        @JavascriptInterface
         public String appVersion() {
             return APP_VERSION;
         }
@@ -150,6 +159,26 @@ public final class MainActivity extends Activity {
         }
 
         dispatchFetchError(requestId, errorMessage(lastError, "Unable to verify the selected package after retries."));
+    }
+
+    private void fetchCannaCabanaPage(String requestId, String rawUrl) {
+        Exception lastError = null;
+
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                PageResponse response = fetchCannaCabanaPageOnce(rawUrl);
+                dispatchCannaPage(requestId, response.url, response.html);
+                return;
+            } catch (Exception error) {
+                lastError = error;
+                if (!sleepBeforeRetry(attempt, MAX_ATTEMPTS)) break;
+            }
+        }
+
+        dispatchCannaFetchError(
+                requestId,
+                errorMessage(lastError, "Unable to fetch the Canna Cabana Elite inventory after retries.")
+        );
     }
 
     private boolean sleepBeforeRetry(int attempt, int maxAttempts) {
@@ -227,6 +256,168 @@ public final class MainActivity extends Activity {
         }
 
         throw new IllegalStateException("Bulk Buddy redirect handling ended unexpectedly.");
+    }
+
+    private PageResponse fetchCannaCabanaPageOnce(String rawUrl) throws Exception {
+        URL currentUrl = validateCannaCabanaUrl(rawUrl);
+
+        for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) currentUrl.openConnection();
+                configureConnection(connection, currentUrl.toURI(), CANNA_CABANA_COLLECTION_URL);
+                connection.setRequestMethod("GET");
+                connection.setRequestProperty("Accept", "application/json");
+
+                int status = connection.getResponseCode();
+                storeCookies(connection);
+
+                if (isRedirectStatus(status)) {
+                    if (redirectCount >= MAX_REDIRECTS) {
+                        throw new IllegalStateException("Canna Cabana exceeded CanShop's redirect safety limit.");
+                    }
+                    String location = connection.getHeaderField("Location");
+                    if (location == null || location.trim().isEmpty()) {
+                        throw new IllegalStateException(
+                                "Canna Cabana returned HTTP " + status + " without a redirect location."
+                        );
+                    }
+                    currentUrl = validateCannaCabanaUrl(new URL(currentUrl, location).toString());
+                    continue;
+                }
+
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException(
+                            "Canna Cabana returned HTTP " + status + " for the Whole Flower inventory request."
+                    );
+                }
+
+                String json = readResponse(connection.getInputStream());
+                JSONObject payload = new JSONObject(json);
+                if (payload.optJSONArray("data") == null || payload.optJSONObject("pagination") == null) {
+                    throw new IllegalStateException("Canna Cabana returned an unexpected inventory response.");
+                }
+
+                return new PageResponse(currentUrl.toString(), json);
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }
+
+        throw new IllegalStateException("Canna Cabana redirect handling ended unexpectedly.");
+    }
+
+    private URL validateCannaCabanaUrl(String rawUrl) throws Exception {
+        URI uri = new URI(rawUrl == null ? "" : rawUrl.trim());
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new SecurityException("Only HTTPS Canna Cabana API requests are allowed.");
+        }
+        if (uri.getHost() == null || !"app.cannacabana.com".equalsIgnoreCase(uri.getHost())) {
+            throw new SecurityException("CanShop only fetches the approved Canna Cabana inventory API.");
+        }
+        if (uri.getPort() != -1 && uri.getPort() != 443) {
+            throw new SecurityException("Unexpected Canna Cabana API port.");
+        }
+        if (uri.getUserInfo() != null || uri.getFragment() != null) {
+            throw new SecurityException("Unexpected Canna Cabana URL components.");
+        }
+        if (!"/api/product/filterv2".equals(uri.getPath())) {
+            throw new SecurityException("That Canna Cabana endpoint is outside the Whole Flower crawler scope.");
+        }
+
+        Map<String, String> params = parseCannaQuery(uri.getRawQuery());
+        requireCannaValue(params, "collection", "whole-flower");
+        requireCannaValue(params, "selectedOptions", "28 G");
+        requireCannaValue(params, "storeId", "3658");
+        requireCannaValue(params, "priceType", "elite_price");
+        requireCannaValue(params, "sortOrder", "asc");
+        requireCannaValue(params, "sortField", "title");
+        requireCannaNumber(params, "thc_level_min", 29.97);
+        requireCannaNumber(params, "thc_level_max", 34.97);
+        requireCannaNumber(params, "price_min", 0.0);
+        requireCannaNumber(params, "cbd_level_min", 0.0);
+        requireCannaNumber(params, "cbd_level_max", 100.0);
+
+        int limit = parsePositiveInt(params.get("limit"), "limit");
+        if (limit != 100) throw new SecurityException("Canna Cabana inventory limit must be 100.");
+
+        int page = parsePositiveInt(params.get("page"), "page");
+        if (page < 1 || page > 20) {
+            throw new SecurityException("Canna Cabana page is outside the approved pagination range.");
+        }
+
+        return uri.toURL();
+    }
+
+    private Map<String, String> parseCannaQuery(String rawQuery) throws Exception {
+        if (rawQuery == null || rawQuery.trim().isEmpty()) {
+            throw new SecurityException("Canna Cabana inventory request is missing filters.");
+        }
+
+        Map<String, String> params = new java.util.HashMap<>();
+        for (String part : rawQuery.split("&")) {
+            if (part == null || part.isEmpty()) continue;
+            int equals = part.indexOf('=');
+            String rawKey = equals >= 0 ? part.substring(0, equals) : part;
+            String rawValue = equals >= 0 ? part.substring(equals + 1) : "";
+            String key = URLDecoder.decode(rawKey, StandardCharsets.UTF_8.name());
+            String value = URLDecoder.decode(rawValue, StandardCharsets.UTF_8.name());
+
+            if (!isAllowedCannaParameter(key)) {
+                throw new SecurityException("Unexpected Canna Cabana inventory filter.");
+            }
+            if (params.put(key, value) != null) {
+                throw new SecurityException("Duplicate Canna Cabana inventory filter.");
+            }
+        }
+        return params;
+    }
+
+    private boolean isAllowedCannaParameter(String key) {
+        return "selectedOptions".equals(key)
+                || "collection".equals(key)
+                || "price_min".equals(key)
+                || "cbd_level_min".equals(key)
+                || "cbd_level_max".equals(key)
+                || "thc_level_min".equals(key)
+                || "thc_level_max".equals(key)
+                || "storeId".equals(key)
+                || "page".equals(key)
+                || "limit".equals(key)
+                || "sortOrder".equals(key)
+                || "sortField".equals(key)
+                || "priceType".equals(key);
+    }
+
+    private void requireCannaValue(Map<String, String> params, String key, String expected) {
+        String value = params.get(key);
+        if (value == null || !expected.equalsIgnoreCase(value.trim())) {
+            throw new SecurityException("Canna Cabana request has an unexpected " + key + " filter.");
+        }
+    }
+
+    private void requireCannaNumber(Map<String, String> params, String key, double expected) {
+        String value = params.get(key);
+        if (value == null) {
+            throw new SecurityException("Canna Cabana request is missing " + key + ".");
+        }
+        try {
+            double parsed = Double.parseDouble(value);
+            if (Math.abs(parsed - expected) > 0.0001) {
+                throw new SecurityException("Canna Cabana request has an unexpected " + key + " filter.");
+            }
+        } catch (NumberFormatException error) {
+            throw new SecurityException("Canna Cabana request has an invalid " + key + " filter.");
+        }
+    }
+
+    private int parsePositiveInt(String value, String key) {
+        if (value == null) throw new SecurityException("Canna Cabana request is missing " + key + ".");
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException error) {
+            throw new SecurityException("Canna Cabana request has an invalid " + key + ".");
+        }
     }
 
     private boolean isRedirectStatus(int status) {
@@ -497,6 +688,25 @@ public final class MainActivity extends Activity {
     private void dispatchFetchError(String requestId, String message) {
         dispatchJavascript(
                 "window.CanShop.receiveFetchError(" +
+                        JSONObject.quote(requestId) + "," +
+                        JSONObject.quote(message) +
+                        ");"
+        );
+    }
+
+    private void dispatchCannaPage(String requestId, String url, String body) {
+        dispatchJavascript(
+                "window.CanShopCanna.receivePage(" +
+                        JSONObject.quote(requestId) + "," +
+                        JSONObject.quote(url) + "," +
+                        JSONObject.quote(body) +
+                        ");"
+        );
+    }
+
+    private void dispatchCannaFetchError(String requestId, String message) {
+        dispatchJavascript(
+                "window.CanShopCanna.receiveFetchError(" +
                         JSONObject.quote(requestId) + "," +
                         JSONObject.quote(message) +
                         ");"
