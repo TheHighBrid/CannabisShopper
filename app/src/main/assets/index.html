@@ -78,7 +78,7 @@
         <span class="status-pill"><span class="live-dot"></span> Research notebook</span>
         <p class="kicker">CURRENT CRAFT FLOWER, ONE CLEAN VIEW</p>
         <h1>Compare strains with clarity, not clutter.</h1>
-        <p>CanShop scans supported Bulk Buddy inventory paths, reads each current craft flower page, and organizes the useful details into a focused local notebook.</p>
+        <p>CanShop scans supported cannabis inventory sources and keeps each retailer in its own clean research view, with a shared price-and-THC comparison when the fields overlap.</p>
         <div class="category-strip" aria-label="CanShop research areas">
           <span><svg><use href="#icon-leaf"></use></svg> Flower</span>
           <span><svg><use href="#icon-chart"></use></svg> Value</span>
@@ -165,8 +165,8 @@
 
     <section id="resultsSection" class="section-heading results-heading">
       <div>
-        <p class="eyebrow">MULTI-SOURCE PRODUCT-PAGE EXTRACTION</p>
-        <h2>Your craft shortlist.</h2>
+        <p class="eyebrow">SOURCE 01 · BULK BUDDY</p>
+        <h2>Bulk Buddy craft shortlist.</h2>
       </div>
       <button id="clearButton" class="text-button danger-text">Clear</button>
     </section>
@@ -205,6 +205,67 @@
     </section>
 
     <section id="results" class="results" aria-live="polite"></section>
+
+    <section id="cannaSection" class="panel source-panel canna-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SOURCE 02 · CANNA CABANA · ELITE</p>
+          <h2>Canna Cabana 28g Whole Flower.</h2>
+        </div>
+        <button id="fetchCannaButton" class="text-button source-fetch-button" type="button">
+          <svg><use href="#icon-refresh"></use></svg> Fetch Elite
+        </button>
+      </div>
+      <p class="source-intro">A separate Canna Cabana view using the Whole Flower inventory for store 3658. Only 28 G products between 29.97% and 34.97% THC with a current Elite price and positive stock are kept. Market and regular member prices are ignored.</p>
+      <div class="locked-filter-strip" aria-label="Locked Canna Cabana filters">
+        <span>Whole Flower</span>
+        <span>28 G</span>
+        <span>THC 29.97–34.97%</span>
+        <span>Elite price only</span>
+        <span>Store 3658</span>
+      </div>
+      <button id="fetchCannaButtonMobile" class="primary source-primary" type="button">Fetch Canna Cabana Elite</button>
+      <p id="cannaStatus" class="status" aria-live="polite">Ready. Canna Cabana uses a separate 28 G / Elite-price inventory query.</p>
+
+      <div class="source-metrics" aria-label="Canna Cabana summary">
+        <article><span id="cannaCount">0</span><small>Elite 28g available</small></article>
+        <article><span id="cannaBestValue">—</span><small>best Elite value</small></article>
+        <article><span id="cannaHighestThc">—</span><small>highest THC</small></article>
+      </div>
+
+      <section id="cannaEmpty" class="empty compact-empty source-empty">
+        <div class="empty-mark"><svg><use href="#icon-leaf"></use></svg></div>
+        <h3>No Canna Cabana Elite results saved yet.</h3>
+        <p>Fetch the locked Whole Flower query to populate the current 28 G Elite shortlist.</p>
+      </section>
+      <section id="cannaResults" class="source-results" aria-live="polite" hidden></section>
+    </section>
+
+    <section id="compareSection" class="panel source-panel compare-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SOURCE 03 · CROSS-SOURCE VIEW</p>
+          <h2>Bulk Buddy × Canna Cabana.</h2>
+        </div>
+        <label class="compare-sort" for="crossSourceSort">
+          <span class="sr-only">Sort cross-source comparison</span>
+          <select id="crossSourceSort">
+            <option value="value">Lowest comparable $/g</option>
+            <option value="price">Lowest package price</option>
+            <option value="thc">Highest THC</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </label>
+      </div>
+      <p class="source-intro">This view intentionally ignores fields the two retailers do not share. It compares only currently available Bulk Buddy 1 Ounce products and Canna Cabana Elite 28 G products using price, THC, and comparable $/g.</p>
+      <p id="crossSourceSummary" class="result-summary" aria-live="polite">Fetch one or both sources to build the common-field comparison.</p>
+      <section id="crossSourceEmpty" class="empty compact-empty source-empty">
+        <div class="empty-mark"><svg><use href="#icon-chart"></use></svg></div>
+        <h3>No common-field comparison yet.</h3>
+        <p>Available price and THC data from either source will appear here automatically.</p>
+      </section>
+      <section id="crossSourceResults" class="compare-results" aria-live="polite" hidden></section>
+    </section>
 
     <section id="about" class="panel method">
       <div class="section-heading compact">
@@ -267,7 +328,7 @@
 
   <footer>
     <span class="footer-brand"><svg><use href="#icon-leaf"></use></svg> Can<span>Shop</span></span>
-    <p>Independent research notebook. Verify prices, freshness, legality, lab information, availability, and local rules yourself.</p>
+    <p>Independent research notebook. Retail inventory and pricing can change quickly. Verify current store availability and checkout pricing before purchasing.</p>
   </footer>
 
   <nav class="bottom-nav" aria-label="Primary navigation">
@@ -279,5 +340,6 @@
 
   <script src="history.js"></script>
   <script src="app.js"></script>
+  <script src="cannacabana.js"></script>
 </body>
 </html>

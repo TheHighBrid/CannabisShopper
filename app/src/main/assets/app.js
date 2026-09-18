@@ -150,6 +150,7 @@
   function writeState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
     localStorage.setItem(PREFS_KEY, JSON.stringify(preferences));
+    window.dispatchEvent(new CustomEvent('canshop:bulkbuddy-updated'));
   }
 
   function numberOrNull(value) {
