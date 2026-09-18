@@ -16,6 +16,7 @@
 
   const els = {
     button: document.querySelector('#fetchCannaButton'),
+    buttonMobile: document.querySelector('#fetchCannaButtonMobile'),
     status: document.querySelector('#cannaStatus'),
     count: document.querySelector('#cannaCount'),
     bestValue: document.querySelector('#cannaBestValue'),
@@ -223,9 +224,16 @@
 
   function setFetching(value) {
     isFetching = value;
-    if (!els.button) return;
-    els.button.disabled = value;
-    els.button.textContent = value ? 'Fetching Elite 28g inventory…' : 'Fetch Canna Cabana Elite';
+    if (els.button) {
+      els.button.disabled = value;
+      els.button.innerHTML = value
+        ? 'Fetching Elite 28g inventory…'
+        : '<svg><use href="#icon-refresh"></use></svg> Fetch Elite';
+    }
+    if (els.buttonMobile) {
+      els.buttonMobile.disabled = value;
+      els.buttonMobile.textContent = value ? 'Fetching Elite 28g inventory…' : 'Fetch Canna Cabana Elite';
+    }
   }
 
   async function refreshCanna() {
@@ -434,6 +442,7 @@
   };
 
   els.button?.addEventListener('click', refreshCanna);
+  els.buttonMobile?.addEventListener('click', refreshCanna);
   els.compareSort?.addEventListener('change', renderComparison);
   window.addEventListener('canshop:bulkbuddy-updated', renderComparison);
 
