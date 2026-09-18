@@ -740,6 +740,21 @@
       if (variationMatches(normalizeText(row.textContent || ''), packageKey)) return true;
     }
 
+    // Bulk Buddy sometimes serves stale product HTML without the variation form, while the
+    // Additional Information text still contains the current weight options. Read that text
+    // directly instead of treating a missing form as unknown inventory.
+    const bodyText = normalizeText(documentFromHtml.body?.textContent || '');
+    const weightPattern = /\bweight\b/gi;
+    for (const match of bodyText.matchAll(weightPattern)) {
+      const start = match.index ?? 0;
+      const windowText = bodyText.slice(start, start + 320);
+      if (!/3\.5\s*grams?|7\s*grams?|1\/2\s*ounce|ounce|quarter\s*pound|half\s*pound|pound/i.test(windowText)) {
+        continue;
+      }
+      sawWeightDefinition = true;
+      if (variationMatches(windowText, packageKey)) return true;
+    }
+
     return sawWeightDefinition ? false : null;
   }
 
