@@ -1009,8 +1009,20 @@
 
     const allowFallback = listingAvailable === true;
     if (allowFallback || !explicitUnavailable) {
-      await resolvePackageViaAjax(documentFromHtml, sourceUrl, 'ounce', prices, allowFallback);
-      await resolvePackageViaAjax(documentFromHtml, sourceUrl, 'quarterPound', prices, allowFallback);
+      await resolvePackageViaAjax(
+        documentFromHtml,
+        sourceUrl,
+        'ounce',
+        prices,
+        allowFallback && preferences.comparisonPackage === 'ounce'
+      );
+      await resolvePackageViaAjax(
+        documentFromHtml,
+        sourceUrl,
+        'quarterPound',
+        prices,
+        allowFallback && preferences.comparisonPackage === 'quarterPound'
+      );
     }
 
     const verifiedPackageAvailable =
