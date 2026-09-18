@@ -854,20 +854,25 @@
   }
 
   function extractFallbackProductId(documentFromHtml, html) {
-    const direct = normalizeText(
+    const formProductId = normalizeText(
       documentFromHtml.querySelector('form.variations_form')?.getAttribute('data-product_id') ||
-      documentFromHtml.querySelector('[data-product_id]')?.getAttribute('data-product_id') ||
-      documentFromHtml.querySelector('[name="product_id"]')?.value ||
+      documentFromHtml.querySelector('form.cart [name="product_id"]')?.value ||
       ''
     );
-    if (/^\\d+$/.test(direct)) return direct;
+    if (/^\\d+$/.test(formProductId)) return formProductId;
 
     const bodyClass = String(documentFromHtml.body?.className || '');
     const bodyMatch = bodyClass.match(/(?:^|\\s)postid-(\\d+)(?:\\s|$)/i);
     if (bodyMatch) return bodyMatch[1];
 
+    const summaryProductId = normalizeText(
+      documentFromHtml.querySelector('.summary [data-product_id]')?.getAttribute('data-product_id') ||
+      ''
+    );
+    if (/^\\d+$/.test(summaryProductId)) return summaryProductId;
+
     const htmlMatch = String(html || '').match(
-      /(?:data-product_id=["']|["']product_id["']\\s*:\\s*["']?)(\\d+)/i
+      /["']product_id["']\\s*:\\s*["']?(\\d+)/i
     );
     return htmlMatch?.[1] || null;
   }
@@ -920,8 +925,6 @@
     }
 
     const seen = new Set();
-    let completedResponses = 0;
-    let sawUnavailable = false;
 
     for (const payload of payloads) {
       const signature = JSON.stringify(payload);
@@ -929,11 +932,7 @@
       seen.add(signature);
       try {
         const variation = await variationWithRetry(sourceUrl, payload, direct.state === 'request' ? 3 : 1);
-        completedResponses += 1;
-        if (variation === false || variation == null || typeof variation !== 'object') {
-          sawUnavailable = true;
-          continue;
-        }
+        if (variation === false || variation == null || typeof variation !== 'object') continue;
 
         const available = variation.variation_is_active !== false
           && variation.is_in_stock !== false
@@ -941,11 +940,7 @@
         const current = numberOrNull(variation.display_price ?? variation.price);
         const regular = numberOrNull(variation.display_regular_price ?? variation.regular_price);
 
-        if (!available) {
-          sawUnavailable = true;
-          continue;
-        }
-        if (current == null) continue;
+        if (!available || current == null) continue;
 
         result[availableKey] = true;
         result[priceKey] = current;
@@ -955,7 +950,9 @@
       }
     }
 
-    if (completedResponses > 0 && sawUnavailable) result[availableKey] = false;
+    // A guessed fallback payload returning false is not proof that the package is unavailable.
+    // Leave the state unknown so the selected-package integrity check fails closed instead of
+    // silently dropping a potentially valid strain.
   }
 
   async function parseProductPage(html, sourceUrl, listingEvidence = null) {
