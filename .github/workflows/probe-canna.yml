@@ -1,0 +1,44 @@
+name: Probe Canna Cabana HTML
+
+on:
+  push:
+    branches:
+      - feature/cannacabana-multisource-v207
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch whole flower page
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --compressed --max-time 45 \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139 Safari/537.36' \
+            -H 'Accept-Language: en-CA,en;q=0.9' \
+            'https://cannacabana.com/collections/whole-flower?sID=3658' \
+            -o canna.html
+          wc -c canna.html
+          echo '--- TITLES / KNOWN PRODUCTS ---'
+          grep -Eio 'Cherry Tang|Ice Cream Rntz|Lemon Gelato|Pink Pussy|Purple Dank|28 G|29\.97|34\.97|Elite|Market|THC|iframe' canna.html | sort | uniq -c | head -100 || true
+          echo '--- SCRIPT / IFRAME SOURCES ---'
+          grep -Eo '<(script|iframe)[^>]+(src|data-src)=["'"'][^"'"']+' canna.html | head -80 || true
+          echo '--- PRODUCT-LIKE DATA ATTRS ---'
+          grep -Eo 'data-[A-Za-z0-9_-]+=["'"'][^"'"']{0,180}["'"']' canna.html | grep -Ei 'product|price|thc|size|store|variant' | head -120 || true
+          echo '--- KNOWN CONTEXT ---'
+          python - <<'PY'
+from pathlib import Path
+s=Path('canna.html').read_text(errors='ignore')
+for needle in ['Cherry Tang','Ice Cream Rntz','Lemon Gelato','THC','Elite','sID','3658','iframe']:
+    i=s.lower().find(needle.lower())
+    print('\n###', needle, 'index', i)
+    if i>=0:
+        print(s[max(0,i-700):i+1700])
+PY
+      - name: Upload probe HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: canna-probe-html
+          path: canna.html
