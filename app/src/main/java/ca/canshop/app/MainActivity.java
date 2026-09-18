@@ -36,7 +36,7 @@ public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_ATTEMPTS = 4;
     private static final int MAX_REDIRECTS = 5;
-    private static final String APP_VERSION = "2.0.3";
+    private static final String APP_VERSION = "2.0.4";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String BROWSER_USER_AGENT =
