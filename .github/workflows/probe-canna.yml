@@ -1,53 +1,30 @@
 name: Probe Canna Cabana HTML
-
 on:
   push:
-    branches:
-      - feature/cannacabana-multisource-v207
+    branches: [feature/cannacabana-multisource-v207]
   workflow_dispatch:
-
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect Canna Cabana data flow
+      - name: Inspect Canna Cabana filters
         run: |
           python - <<'PY'
           import urllib.request
-          url='https://cannacabana.com/collections/whole-flower?sID=3658'
-          req=urllib.request.Request(url,headers={
-              'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139 Safari/537.36',
-              'Accept-Language':'en-CA,en;q=0.9'
-          })
-          body=urllib.request.urlopen(req,timeout=45).read().decode('utf-8','ignore')
-          open('canna.html','w',encoding='utf-8').write(body)
-          print('SIZE',len(body),'STORE3658',body.count('3658'))
-          markers=[
-            'scan-multiple-items',
-            'meta.value.split',
-            'let elite_v',
-            'elite_v =',
-            'global_store_id',
-            'oauth/token',
-            'const products',
-            'let products',
-            'product.metafields',
-            'metafields.forEach',
-            'productData',
-          ]
-          for marker in markers:
-              print('\n\n===== MARKER',marker,'=====')
-              pos=0
-              hits=0
-              while hits<4:
-                  i=body.find(marker,pos)
+          u='https://cannacabana.com/collections/whole-flower?sID=3658'
+          q=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0 Chrome/139','Accept-Language':'en-CA,en;q=0.9'})
+          s=urllib.request.urlopen(q,timeout=45).read().decode('utf-8','ignore')
+          open('canna.html','w',encoding='utf-8').write(s)
+          for m in ['applyFilters', 'data-type="size"', 'data-type="thc"', 'thc-min', 'thc-max', 'selectedSizes', 'selectedSize', 'minTHC', 'maxTHC', 'min_thc', 'max_thc']:
+              print('\n===== '+m+' =====')
+              p=0
+              for n in range(6):
+                  i=s.find(m,p)
                   if i<0: break
-                  print('\n--- HIT',hits+1,'INDEX',i,'---')
-                  print(body[max(0,i-9000):i+16000])
-                  pos=i+len(marker)
-                  hits+=1
-              if hits==0: print('NOT FOUND')
+                  print('\n---',i,'---')
+                  print(s[max(0,i-5000):i+12000])
+                  p=i+len(m)
           PY
       - uses: actions/upload-artifact@v4
         with:
