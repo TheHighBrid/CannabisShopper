@@ -1,6 +1,6 @@
 {
   "name": "cannabis-shopper",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "CanShop: a research-focused craft cannabis flower comparison tool for legal-age adults in Canada.",
   "main": "dist/index.js",
   "type": "module",
@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
-    "check:web": "node --check app/src/main/assets/app.js && node --check app/src/main/assets/history.js",
+    "check:web": "node --check app/src/main/assets/app.js && node --check app/src/main/assets/history.js && node --check app/src/main/assets/cannacabana.js",
     "check": "npm run typecheck && npm run test && npm run check:web"
   },
   "keywords": ["cannabis", "craft-flower", "comparison", "canada", "research", "android"],
