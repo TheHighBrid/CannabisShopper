@@ -12,8 +12,8 @@
   const SEARCH_URL = `${ORIGIN}/?term=craft-cannabis-flowers&s=&post_type=product&taxonomy=product_cat`;
   const CRAFT_CATEGORY_URL = `${ORIGIN}/product-category/cannabis/craft-cannabis-flowers/?shop_view=list_view&per_page=200`;
   const DISCOVERY_SEEDS = [
-    CRAFT_CATEGORY_URL,
     SEARCH_URL,
+    CRAFT_CATEGORY_URL,
     `${ORIGIN}/product-category/cannabis/?shop_view=list_view&per_page=200`,
     `${ORIGIN}/product-category/cannabis/aaaa/?shop_view=list_view&per_page=200`,
     `${ORIGIN}/product-category/cannabis/indica/?shop_view=list_view&per_page=200`,
@@ -670,8 +670,8 @@
           available: available === true
             ? true
             : (existing?.available === true ? true : (available === false || existing?.available === false ? false : null)),
-          listingMinPrice: priceRange.min ?? existing?.listingMinPrice ?? null,
-          listingMaxPrice: priceRange.max ?? existing?.listingMaxPrice ?? null,
+          listingMinPrice: existing?.listingMinPrice ?? priceRange.min ?? null,
+          listingMaxPrice: existing?.listingMaxPrice ?? priceRange.max ?? null,
           listingText: normalizeText(card?.textContent || existing?.listingText || '')
         });
       } catch {
