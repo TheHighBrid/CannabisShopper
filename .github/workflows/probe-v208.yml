@@ -74,6 +74,11 @@ jobs:
               window=plain[i:i+500]
               prices=[float(x) for x in re.findall(r'\$\s*([0-9]+(?:\.[0-9]{1,2})?)',window)]
               print('BULK_KNOWN',name,'PRICES',prices[:6],'MAX',max(prices) if prices else None,'OUNCE_PLAUSIBLE',(max(prices)>=90 if prices else None))
+          for name in ['Pink Banner AAAA+ Indica Craft','Pink Wagyu AAAA+ Indica Craft']:
+              j=html.lower().find(name.lower())
+              print('RAW_CONTEXT',name,'INDEX',j)
+              if j>=0:
+                  print(html[max(0,j-2200):j+4000].replace('\\n',' ')[:6200])
 
           base='https://app.cannacabana.com/api/product/filterv2'
           params={
