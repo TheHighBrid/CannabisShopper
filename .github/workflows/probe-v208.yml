@@ -58,6 +58,22 @@ jobs:
           print('BULK_CRAFT_CARDS',len(relevant))
           for item in relevant:
               print('BULK_CARD',item,'OUNCE_PLAUSIBLE',item[2] is None or item[2] >= 90)
+          names=[
+            'Grape Ape AAAA+ Hybrid Craft','Kombucha AAAA+ Hybrid Craft',
+            'Pink Banner AAAA+ Indica Craft','Pink Pussy AAAA+ Indica Craft',
+            'Pink Wagyu AAAA+ Indica Craft','Platinum Death Bubba AAAA+ Indica Craft',
+            'Purple Banana Breath AAAA+ Indica Craft','Purple Dank Breath AAAA+ Indica Craft',
+            'Supreme Death Bubba AAAA+ Indica Craft','Tuna Kush AAAA+ Indica Craft'
+          ]
+          plain=re.sub(r'<[^>]+>',' ',html)
+          plain=' '.join(plain.split())
+          for name in names:
+              i=plain.lower().find(name.lower())
+              if i<0:
+                  print('BULK_KNOWN_MISSING',name); continue
+              window=plain[i:i+500]
+              prices=[float(x) for x in re.findall(r'\$\s*([0-9]+(?:\.[0-9]{1,2})?)',window)]
+              print('BULK_KNOWN',name,'PRICES',prices[:6],'MAX',max(prices) if prices else None,'OUNCE_PLAUSIBLE',(max(prices)>=90 if prices else None))
 
           base='https://app.cannacabana.com/api/product/filterv2'
           params={
