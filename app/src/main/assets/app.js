@@ -12,8 +12,8 @@
   const SEARCH_URL = `${ORIGIN}/?term=craft-cannabis-flowers&s=&post_type=product&taxonomy=product_cat`;
   const CRAFT_CATEGORY_URL = `${ORIGIN}/product-category/cannabis/craft-cannabis-flowers/?shop_view=list_view&per_page=200`;
   const DISCOVERY_SEEDS = [
-    CRAFT_CATEGORY_URL,
     SEARCH_URL,
+    CRAFT_CATEGORY_URL,
     `${ORIGIN}/product-category/cannabis/?shop_view=list_view&per_page=200`,
     `${ORIGIN}/product-category/cannabis/aaaa/?shop_view=list_view&per_page=200`,
     `${ORIGIN}/product-category/cannabis/indica/?shop_view=list_view&per_page=200`,
@@ -27,6 +27,7 @@
   ];
   const PACKAGE_GRAMS = { ounce: 28.3495, quarterPound: 113.398 };
   const PACKAGE_LABELS = { ounce: '1 Ounce', quarterPound: 'Quarter Pound' };
+  const MIN_LISTING_MAX_FOR_ONE_OUNCE = 90;
   const MAX_DISCOVERY_PAGES = 36;
   const MAX_PRODUCT_PAGES = 180;
   const REQUEST_ATTEMPTS = 4;
@@ -293,7 +294,10 @@
 
   function isEligibleForSelectedPackage(product) {
     const available = selectedPackageAvailability(product);
-    return product.available && available === true;
+    const price = preferences.comparisonPackage === 'quarterPound'
+      ? numberOrNull(product.quarterPoundPrice)
+      : numberOrNull(product.oneOuncePrice);
+    return product.available && available === true && price != null;
   }
 
   function transparency(product) {
@@ -613,6 +617,27 @@
     return activePurchaseSignal ? true : null;
   }
 
+  function listingPriceRange(card) {
+    if (!card) return { min: null, max: null };
+    const text = normalizeText(
+      card.querySelector('.price')?.textContent ||
+      card.textContent ||
+      ''
+    );
+    const values = [...text.matchAll(/\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)]
+      .map(match => Number(match[1].replaceAll(',', '')))
+      .filter(value => Number.isFinite(value) && value > 0);
+    if (!values.length) return { min: null, max: null };
+    return { min: Math.min(...values), max: Math.max(...values) };
+  }
+
+  function listingCanPossiblyOfferSelectedPackage(evidence) {
+    if (preferences.comparisonPackage !== 'ounce') return true;
+    const listingMax = numberOrNull(evidence?.listingMaxPrice);
+    if (listingMax == null) return true;
+    return listingMax >= MIN_LISTING_MAX_FOR_ONE_OUNCE;
+  }
+
   function discoverLinks(html, baseUrl) {
     const documentFromHtml = new DOMParser().parseFromString(html, 'text/html');
     const productEntries = new Map();
@@ -632,6 +657,7 @@
 
         const canonical = canonicalUrl(url.href);
         const available = listingAvailability(card);
+        const priceRange = listingPriceRange(card);
         const name = normalizeText(
           card?.querySelector('h2, h3, .woocommerce-loop-product__title, .product-title')?.textContent ||
           anchor.textContent ||
@@ -644,6 +670,8 @@
           available: available === true
             ? true
             : (existing?.available === true ? true : (available === false || existing?.available === false ? false : null)),
+          listingMinPrice: existing?.listingMinPrice ?? priceRange.min ?? null,
+          listingMaxPrice: existing?.listingMaxPrice ?? priceRange.max ?? null,
           listingText: normalizeText(card?.textContent || existing?.listingText || '')
         });
       } catch {
@@ -1150,7 +1178,9 @@
   function selectedPackageIssue(product) {
     const key = preferences.comparisonPackage;
     const available = key === 'ounce' ? product.oneOunceAvailable : product.quarterPoundAvailable;
+    const price = key === 'ounce' ? product.oneOuncePrice : product.quarterPoundPrice;
     if (available === null) return 'unknown availability';
+    if (available === true && price == null) return 'missing verified price';
     return null;
   }
 
@@ -1173,18 +1203,25 @@
       const packageUnavailable = [];
       const soldOut = [];
       const failedPages = [];
-      const extractionFailures = [];
+      const unverifiedSelectedPackage = [];
       let skippedNonCraft = 0;
 
       for (let index = 0; index < discovery.urls.length; index += 1) {
         const url = discovery.urls[index];
+        const evidence = discovery.evidence.get(url) || null;
         setStatus(`Verifying product ${index + 1} of ${discovery.urls.length}… ${accepted.length} eligible ${PACKAGE_LABELS[preferences.comparisonPackage]} strains confirmed.`);
+
+        if (!listingCanPossiblyOfferSelectedPackage(evidence)) {
+          packageUnavailable.push(evidence?.name || new URL(url).pathname);
+          continue;
+        }
+
         try {
           const response = await requestWithRetry(url);
           const product = await parseProductPage(
             response.html,
             response.url,
-            discovery.evidence.get(url) || null
+            evidence
           );
           if (!product) {
             skippedNonCraft += 1;
@@ -1196,7 +1233,7 @@
           }
           const issue = selectedPackageIssue(product);
           if (issue) {
-            extractionFailures.push(`${product.name}: ${issue}`);
+            unverifiedSelectedPackage.push(`${product.name}: ${issue}`);
             continue;
           }
           if (!isEligibleForSelectedPackage(product)) {
@@ -1213,11 +1250,8 @@
         if ((index + 1) % 4 === 0) await sleep(300);
       }
 
-      if (failedPages.length || extractionFailures.length) {
-        const details = [
-          failedPages.length ? `${failedPages.length} product page${failedPages.length === 1 ? '' : 's'} failed` : '',
-          extractionFailures.length ? `${extractionFailures.length} selected-package record${extractionFailures.length === 1 ? '' : 's'} could not be verified` : ''
-        ].filter(Boolean).join(' and ');
+      if (failedPages.length) {
+        const details = `${failedPages.length} product page${failedPages.length === 1 ? '' : 's'} failed`;
         throw new Error(`Incomplete fetch: ${details}. Previous results were kept and no history snapshot was saved.`);
       }
 
@@ -1233,7 +1267,8 @@
       render();
       setStatus(
         `Fetched ${uniqueProducts.length} verified ${PACKAGE_LABELS[preferences.comparisonPackage]} craft strain${uniqueProducts.length === 1 ? '' : 's'} from ${discovery.urls.length} candidate product pages across ${discovery.visitedPages} inventory pages.` +
-        `${packageUnavailable.length ? ` Excluded ${packageUnavailable.length} without ${PACKAGE_LABELS[preferences.comparisonPackage]}.` : ''}` +
+        `${packageUnavailable.length ? ` Excluded ${packageUnavailable.length} whose live listing cannot plausibly contain ${PACKAGE_LABELS[preferences.comparisonPackage]}.` : ''}` +
+        `${unverifiedSelectedPackage.length ? ` Excluded ${unverifiedSelectedPackage.length} because the selected package price could not be verified.` : ''}` +
         `${soldOut.length ? ` Excluded ${soldOut.length} sold out product${soldOut.length === 1 ? '' : 's'}.` : ''}` +
         `${skippedNonCraft ? ` Filtered ${skippedNonCraft} non-craft page${skippedNonCraft === 1 ? '' : 's'}.` : ''}`
       );

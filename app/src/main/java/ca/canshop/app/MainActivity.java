@@ -36,8 +36,11 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_ATTEMPTS = 4;
+    private static final int CANNA_MAX_ATTEMPTS = 2;
+    private static final int CANNA_CONNECT_TIMEOUT_MS = 10_000;
+    private static final int CANNA_READ_TIMEOUT_MS = 15_000;
     private static final int MAX_REDIRECTS = 5;
-    private static final String APP_VERSION = "2.0.7";
+    private static final String APP_VERSION = "2.0.8";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String CANNA_CABANA_API_ORIGIN = "https://app.cannacabana.com";
@@ -164,14 +167,14 @@ public final class MainActivity extends Activity {
     private void fetchCannaCabanaPage(String requestId, String rawUrl) {
         Exception lastError = null;
 
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        for (int attempt = 1; attempt <= CANNA_MAX_ATTEMPTS; attempt++) {
             try {
                 PageResponse response = fetchCannaCabanaPageOnce(rawUrl);
                 dispatchCannaPage(requestId, response.url, response.html);
                 return;
             } catch (Exception error) {
                 lastError = error;
-                if (!sleepBeforeRetry(attempt, MAX_ATTEMPTS)) break;
+                if (!sleepBeforeRetry(attempt, CANNA_MAX_ATTEMPTS)) break;
             }
         }
 
@@ -265,9 +268,8 @@ public final class MainActivity extends Activity {
             HttpURLConnection connection = null;
             try {
                 connection = (HttpURLConnection) currentUrl.openConnection();
-                configureConnection(connection, currentUrl.toURI(), CANNA_CABANA_COLLECTION_URL);
+                configureCannaConnection(connection);
                 connection.setRequestMethod("GET");
-                connection.setRequestProperty("Accept", "application/json");
 
                 int status = connection.getResponseCode();
                 storeCookies(connection);
@@ -470,6 +472,26 @@ public final class MainActivity extends Activity {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private void configureCannaConnection(HttpURLConnection connection) {
+        connection.setConnectTimeout(CANNA_CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(CANNA_READ_TIMEOUT_MS);
+        connection.setUseCaches(false);
+        connection.setDefaultUseCaches(false);
+        connection.setInstanceFollowRedirects(false);
+        connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
+        connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+        connection.setRequestProperty("Pragma", "no-cache");
+        connection.setRequestProperty("Expires", "0");
+        connection.setRequestProperty("Origin", "https://cannacabana.com");
+        connection.setRequestProperty("Referer", CANNA_CABANA_COLLECTION_URL);
+        connection.setRequestProperty("Sec-Fetch-Site", "cross-site");
+        connection.setRequestProperty("Sec-Fetch-Mode", "cors");
+        connection.setRequestProperty("Sec-Fetch-Dest", "empty");
+        connection.setRequestProperty("Connection", "close");
     }
 
     private void configureConnection(HttpURLConnection connection, URI cookieUri, String referer) throws Exception {
