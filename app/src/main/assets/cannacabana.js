@@ -11,7 +11,7 @@
   const SIZE_GRAMS = 28;
   const THC_MIN = 29.97;
   const THC_MAX = 34.97;
-  const REQUEST_TIMEOUT_MS = 60_000;
+  const REQUEST_TIMEOUT_MS = 70_000;
   const pending = new Map();
 
   const els = {
