@@ -624,8 +624,8 @@
       card.textContent ||
       ''
     );
-    const values = [...text.matchAll(/\$\s*([0-9]+(?:\.[0-9]{1,2})?)/g)]
-      .map(match => Number(match[1]))
+    const values = [...text.matchAll(/\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)]
+      .map(match => Number(match[1].replaceAll(',', '')))
       .filter(value => Number.isFinite(value) && value > 0);
     if (!values.length) return { min: null, max: null };
     return { min: Math.min(...values), max: Math.max(...values) };
