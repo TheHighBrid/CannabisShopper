@@ -13,6 +13,12 @@ import android.webkit.WebViewClient;
 
 import org.json.JSONObject;
 
+import okhttp3.Call;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -30,17 +36,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MAX_ATTEMPTS = 4;
     private static final int CANNA_MAX_ATTEMPTS = 2;
-    private static final int CANNA_CONNECT_TIMEOUT_MS = 10_000;
-    private static final int CANNA_READ_TIMEOUT_MS = 15_000;
     private static final int MAX_REDIRECTS = 5;
-    private static final String APP_VERSION = "2.0.8";
+    private static final String APP_VERSION = "2.0.9";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String CANNA_CABANA_API_ORIGIN = "https://app.cannacabana.com";
@@ -54,6 +60,16 @@ public final class MainActivity extends Activity {
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
     private final java.net.CookieManager httpCookieManager =
             new java.net.CookieManager(null, CookiePolicy.ACCEPT_ALL);
+    private final Map<String, Call> cannaCalls = new ConcurrentHashMap<>();
+    private final OkHttpClient cannaHttpClient = new OkHttpClient.Builder()
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build();
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -99,6 +115,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        for (Call call : cannaCalls.values()) {
+            if (call != null) call.cancel();
+        }
+        cannaCalls.clear();
         networkExecutor.shutdownNow();
         if (webView != null) {
             webView.removeJavascriptInterface("Android");
@@ -121,6 +141,12 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void fetchCannaCabanaPage(String requestId, String rawUrl) {
             networkExecutor.execute(() -> fetchCannaCabanaPage(requestId, rawUrl));
+        }
+
+        @JavascriptInterface
+        public void cancelCannaCabanaRequest(String requestId) {
+            Call call = cannaCalls.remove(requestId);
+            if (call != null) call.cancel();
         }
 
         @JavascriptInterface
@@ -169,7 +195,7 @@ public final class MainActivity extends Activity {
 
         for (int attempt = 1; attempt <= CANNA_MAX_ATTEMPTS; attempt++) {
             try {
-                PageResponse response = fetchCannaCabanaPageOnce(rawUrl);
+                PageResponse response = fetchCannaCabanaPageOnce(requestId, rawUrl);
                 dispatchCannaPage(requestId, response.url, response.html);
                 return;
             } catch (Exception error) {
@@ -178,9 +204,11 @@ public final class MainActivity extends Activity {
             }
         }
 
+        cannaCalls.remove(requestId);
         dispatchCannaFetchError(
                 requestId,
-                errorMessage(lastError, "Unable to fetch the Canna Cabana Elite inventory after retries.")
+                "Canna Cabana request failed inside the bounded 25-second network window: " +
+                        errorMessage(lastError, "unknown network error")
         );
     }
 
@@ -261,52 +289,52 @@ public final class MainActivity extends Activity {
         throw new IllegalStateException("Bulk Buddy redirect handling ended unexpectedly.");
     }
 
-    private PageResponse fetchCannaCabanaPageOnce(String rawUrl) throws Exception {
-        URL currentUrl = validateCannaCabanaUrl(rawUrl);
+    private PageResponse fetchCannaCabanaPageOnce(String requestId, String rawUrl) throws Exception {
+        URL validatedUrl = validateCannaCabanaUrl(rawUrl);
 
-        for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-            HttpURLConnection connection = null;
-            try {
-                connection = (HttpURLConnection) currentUrl.openConnection();
-                configureCannaConnection(connection);
-                connection.setRequestMethod("GET");
+        Request request = new Request.Builder()
+                .url(validatedUrl.toString())
+                .get()
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .header("Accept", "application/json")
+                .header("Accept-Language", "en-CA,en;q=0.9")
+                .header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+                .header("Pragma", "no-cache")
+                .header("Origin", "https://cannacabana.com")
+                .header("Referer", CANNA_CABANA_COLLECTION_URL)
+                .build();
 
-                int status = connection.getResponseCode();
-                storeCookies(connection);
+        Call call = cannaHttpClient.newCall(request);
+        cannaCalls.put(requestId, call);
 
-                if (isRedirectStatus(status)) {
-                    if (redirectCount >= MAX_REDIRECTS) {
-                        throw new IllegalStateException("Canna Cabana exceeded CanShop's redirect safety limit.");
-                    }
-                    String location = connection.getHeaderField("Location");
-                    if (location == null || location.trim().isEmpty()) {
-                        throw new IllegalStateException(
-                                "Canna Cabana returned HTTP " + status + " without a redirect location."
-                        );
-                    }
-                    currentUrl = validateCannaCabanaUrl(new URL(currentUrl, location).toString());
-                    continue;
-                }
+        try (Response response = call.execute()) {
+            URL responseUrl = validateCannaCabanaUrl(response.request().url().toString());
 
-                if (status < 200 || status >= 300) {
-                    throw new IllegalStateException(
-                            "Canna Cabana returned HTTP " + status + " for the Whole Flower inventory request."
-                    );
-                }
-
-                String json = readResponse(connection.getInputStream());
-                JSONObject payload = new JSONObject(json);
-                if (payload.optJSONArray("data") == null || payload.optJSONObject("pagination") == null) {
-                    throw new IllegalStateException("Canna Cabana returned an unexpected inventory response.");
-                }
-
-                return new PageResponse(currentUrl.toString(), json);
-            } finally {
-                if (connection != null) connection.disconnect();
+            if (!response.isSuccessful()) {
+                throw new IllegalStateException(
+                        "Canna Cabana returned HTTP " + response.code() + " for the Whole Flower inventory request."
+                );
             }
-        }
 
-        throw new IllegalStateException("Canna Cabana redirect handling ended unexpectedly.");
+            ResponseBody body = response.body();
+            if (body == null) {
+                throw new IllegalStateException("Canna Cabana returned an empty response.");
+            }
+
+            String json = body.string();
+            if (json.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
+                throw new IllegalStateException("Canna Cabana returned an unexpectedly large response.");
+            }
+
+            JSONObject payload = new JSONObject(json);
+            if (payload.optJSONArray("data") == null || payload.optJSONObject("pagination") == null) {
+                throw new IllegalStateException("Canna Cabana returned an unexpected inventory response.");
+            }
+
+            return new PageResponse(responseUrl.toString(), json);
+        } finally {
+            cannaCalls.remove(requestId, call);
+        }
     }
 
     private URL validateCannaCabanaUrl(String rawUrl) throws Exception {
@@ -472,26 +500,6 @@ public final class MainActivity extends Activity {
         } finally {
             if (connection != null) connection.disconnect();
         }
-    }
-
-    private void configureCannaConnection(HttpURLConnection connection) {
-        connection.setConnectTimeout(CANNA_CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(CANNA_READ_TIMEOUT_MS);
-        connection.setUseCaches(false);
-        connection.setDefaultUseCaches(false);
-        connection.setInstanceFollowRedirects(false);
-        connection.setRequestProperty("User-Agent", BROWSER_USER_AGENT);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Accept-Language", "en-CA,en;q=0.9");
-        connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
-        connection.setRequestProperty("Pragma", "no-cache");
-        connection.setRequestProperty("Expires", "0");
-        connection.setRequestProperty("Origin", "https://cannacabana.com");
-        connection.setRequestProperty("Referer", CANNA_CABANA_COLLECTION_URL);
-        connection.setRequestProperty("Sec-Fetch-Site", "cross-site");
-        connection.setRequestProperty("Sec-Fetch-Mode", "cors");
-        connection.setRequestProperty("Sec-Fetch-Dest", "empty");
-        connection.setRequestProperty("Connection", "close");
     }
 
     private void configureConnection(HttpURLConnection connection, URI cookieUri, String referer) throws Exception {

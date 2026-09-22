@@ -11,7 +11,7 @@
   const SIZE_GRAMS = 28;
   const THC_MIN = 29.97;
   const THC_MAX = 34.97;
-  const REQUEST_TIMEOUT_MS = 70_000;
+  const REQUEST_TIMEOUT_MS = 35_000;
   const pending = new Map();
 
   const els = {
@@ -78,7 +78,13 @@
       const requestId = makeRequestId();
       const timer = window.setTimeout(() => {
         pending.delete(requestId);
-        reject(new Error('Canna Cabana request timed out.'));
+        try {
+          if (window.Android && typeof window.Android.cancelCannaCabanaRequest === 'function') {
+            window.Android.cancelCannaCabanaRequest(requestId);
+          }
+        } catch {
+        }
+        reject(new Error('Canna Cabana did not return inside the 35-second safety window.'));
       }, REQUEST_TIMEOUT_MS);
 
       pending.set(requestId, {
