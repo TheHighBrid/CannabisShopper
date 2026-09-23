@@ -43,9 +43,9 @@ jobs:
         with:
           packages: ''
 
-      - name: Install Android platform and emulator image
+      - name: Install Android build platform
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -91,7 +91,6 @@ jobs:
           data=json.loads(raw)
           assert isinstance(data.get('data'), list) and data['data']
           assert isinstance(data.get('pagination'), dict)
-          # Emulate the exact JSON.parse boundary used after Android evaluateJavascript dispatch.
           reparsed=json.loads(json.dumps(data, separators=(',', ':')))
           assert len(reparsed['data']) == len(data['data'])
           print({'bridge_bytes': len(raw), 'products': len(data['data']), 'stage': 5, 'roundtrip': 'PASS'})
