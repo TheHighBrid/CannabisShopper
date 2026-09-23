@@ -1,0 +1,129 @@
+name: CanShop v3 six-stage validation
+
+on:
+  push:
+    branches:
+      - fix/canna-compact-bridge-pre-v300
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Round ${{ matrix.round }} · six stages
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        round: [1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install Android platform and emulator image
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Stage 1 · static source and unit validation
+        run: |
+          echo "ROUND=${{ matrix.round }} STAGE=1"
+          npm ci
+          npm run check
+          python -m py_compile scripts/validate_live_retailers.py
+          grep -q "versionName '2.0.9'" app/build.gradle
+
+      - name: Stage 2 · live Canna Cabana contract
+        run: |
+          echo "ROUND=${{ matrix.round }} STAGE=2"
+          python scripts/validate_live_retailers.py canna
+
+      - name: Stage 3 · live Bulk Buddy contract
+        run: |
+          echo "ROUND=${{ matrix.round }} STAGE=3"
+          python scripts/validate_live_retailers.py bulk
+
+      - name: Stage 4 · Android debug, release, and test APK build
+        run: |
+          echo "ROUND=${{ matrix.round }} STAGE=4"
+          gradle :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest --stacktrace
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/release/app-release.apk
+          test -s app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+
+      - name: Stage 5 · compact WebView bridge payload integrity
+        run: |
+          echo "ROUND=${{ matrix.round }} STAGE=5"
+          python scripts/validate_live_retailers.py bridge
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('build/validation/canna-compact.json')
+          raw=p.read_bytes()
+          assert len(raw) < 256*1024, len(raw)
+          data=json.loads(raw)
+          assert isinstance(data.get('data'), list) and data['data']
+          assert isinstance(data.get('pagination'), dict)
+          # Emulate the exact JSON.parse boundary used after Android evaluateJavascript dispatch.
+          reparsed=json.loads(json.dumps(data, separators=(',', ':')))
+          assert len(reparsed['data']) == len(data['data'])
+          print({'bridge_bytes': len(raw), 'products': len(data['data']), 'stage': 5, 'roundtrip': 'PASS'})
+          PY
+
+      - name: Enable KVM
+        run: |
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Stage 6 · Android emulator WebView bridge, persistence, and comparison E2E
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            echo "ROUND=${{ matrix.round }} STAGE=6"
+            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ca.canshop.app.CannaCabanaE2ETest --stacktrace
+            test -d app/build/reports/androidTests/connected/debug
+
+      - name: Preserve validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-validation-round-${{ matrix.round }}
+          if-no-files-found: ignore
+          path: |
+            app/build/reports/androidTests/connected/debug/**
+            app/build/outputs/androidTest-results/connected/**
+            build/validation/**
