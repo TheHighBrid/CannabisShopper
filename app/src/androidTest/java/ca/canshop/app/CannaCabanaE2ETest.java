@@ -117,16 +117,10 @@ public final class CannaCabanaE2ETest {
     private String tryEvaluate(WebView webView, String script) throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<String> value = new AtomicReference<>("null");
-        webView.post(() -> {
-            if (webView.isDestroyed()) {
-                latch.countDown();
-                return;
-            }
-            webView.evaluateJavascript(script, result -> {
-                value.set(result == null ? "null" : result);
-                latch.countDown();
-            });
-        });
+        webView.post(() -> webView.evaluateJavascript(script, result -> {
+            value.set(result == null ? "null" : result);
+            latch.countDown();
+        }));
         if (!latch.await(JS_CALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             return "null";
         }
