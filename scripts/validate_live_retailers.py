@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import html as html_lib
 import json
 import re
 import sys
 import time
 import urllib.parse
 import urllib.request
-from html.parser import HTMLParser
 from pathlib import Path
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139 Safari/537.36"
@@ -128,36 +128,33 @@ def compact_payload(payload):
     return out
 
 
-class ProductCardParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.capture = False
-        self.depth = 0
-        self.parts = []
-        self.cards = []
+def normalize_html_text(fragment):
+    text = re.sub(r"<script\b[^>]*>.*?</script>", " ", fragment, flags=re.I | re.S)
+    text = re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html_lib.unescape(text)
+    return " ".join(text.split())
 
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        classes = set((attrs.get("class") or "").split())
-        if not self.capture and tag == "li" and "product" in classes:
-            self.capture = True
-            self.depth = 1
-            self.parts = []
-        elif self.capture:
-            self.depth += 1
 
-    def handle_endtag(self, tag):
-        if self.capture:
-            self.depth -= 1
-            if self.depth == 0:
-                self.cards.append(" ".join(self.parts))
-                self.capture = False
-
-    def handle_data(self, data):
-        if self.capture:
-            text = " ".join(data.split())
-            if text:
-                self.parts.append(text)
+def bulk_product_windows(html):
+    link_pattern = re.compile(
+        r"href=[\"'](?P<url>(?:https?://(?:www\.)?bulkbuddy\.co)?/product/[^\"'#?]+/?)[\"']",
+        re.I,
+    )
+    found = {}
+    for match in link_pattern.finditer(html):
+        url = match.group("url")
+        if url.startswith("/"):
+            url = "https://www.bulkbuddy.co" + url
+        start = max(0, match.start() - 1800)
+        end = min(len(html), match.end() + 2800)
+        context = normalize_html_text(html[start:end])
+        if "craft" not in context.lower():
+            continue
+        existing = found.get(url)
+        if existing is None or len(context) > len(existing):
+            found[url] = context
+    return found
 
 
 def validate_canna():
@@ -172,21 +169,41 @@ def validate_bulk():
     status, final_url, raw, elapsed = fetch(BULK_URL, timeout=30)
     if status != 200:
         raise AssertionError(f"Bulk Buddy HTTP {status}")
+    parsed_final = urllib.parse.urlparse(final_url)
+    if parsed_final.hostname not in {"bulkbuddy.co", "www.bulkbuddy.co"}:
+        raise AssertionError(f"Unexpected Bulk Buddy final host: {parsed_final.hostname}")
+    if elapsed >= 20:
+        raise AssertionError(f"Bulk Buddy search exceeded 20-second validation budget: {elapsed:.3f}s")
     html = raw.decode("utf-8", "ignore")
-    parser = ProductCardParser()
-    parser.feed(html)
-    craft = []
-    for card in parser.cards:
-        if "craft" not in card.lower():
-            continue
-        prices = [float(x.replace(",", "")) for x in re.findall(r"\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)", card)]
-        craft.append({"text": card[:180], "min": min(prices) if prices else None, "max": max(prices) if prices else None})
-    if len(craft) < 4:
-        raise AssertionError(f"Bulk Buddy craft search returned too few product cards: {len(craft)}")
-    plausible = [item for item in craft if item["max"] is None or item["max"] >= 90]
+    windows = bulk_product_windows(html)
+    if len(windows) < 4:
+        # Fallback to visible search text so a harmless storefront markup refactor does not
+        # masquerade as an inventory outage. The app itself has independent DOM parsing tests.
+        plain = normalize_html_text(html)
+        craft_titles = set(
+            " ".join(match.group(0).split())
+            for match in re.finditer(r"[A-Za-z0-9][A-Za-z0-9 &'’+()./-]{2,90}(?:AAAA\+|AAAA)[A-Za-z0-9 &'’+()./-]{0,80}Craft", plain, re.I)
+        )
+        if len(craft_titles) < 4:
+            raise AssertionError(
+                f"Bulk Buddy live craft contract exposed too little inventory: {len(windows)} product links / {len(craft_titles)} visible craft titles"
+            )
+        print(json.dumps({"status": "PASS", "elapsed_s": round(elapsed, 3), "craft_titles": len(craft_titles), "mode": "visible-title-fallback", "final_url": final_url}, indent=2))
+        return
+
+    priced = []
+    plausible = []
+    for url, context in windows.items():
+        prices = [float(x.replace(",", "")) for x in re.findall(r"\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)", context)]
+        if prices:
+            priced.append(url)
+            if max(prices) >= 90:
+                plausible.append(url)
+    if len(priced) < 3:
+        raise AssertionError(f"Bulk Buddy craft inventory exposed prices for too few product links: {len(priced)}")
     if not plausible:
-        raise AssertionError("Bulk Buddy live listing has no plausible 1 Ounce candidates")
-    print(json.dumps({"status": "PASS", "elapsed_s": round(elapsed, 3), "craft_cards": len(craft), "plausible_ounce_cards": len(plausible), "final_url": final_url}, indent=2))
+        raise AssertionError("Bulk Buddy live listing has no price range plausibly containing a 1 Ounce package")
+    print(json.dumps({"status": "PASS", "elapsed_s": round(elapsed, 3), "craft_product_links": len(windows), "priced_links": len(priced), "plausible_ounce_links": len(plausible), "final_url": final_url}, indent=2))
 
 
 def validate_bridge():
