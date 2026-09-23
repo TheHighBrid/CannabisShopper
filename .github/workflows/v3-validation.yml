@@ -3,7 +3,7 @@ name: CanShop v3 six-stage validation
 on:
   push:
     branches:
-      - fix/canna-compact-bridge-pre-v300
+      - fix/canna-v300-validation-rigorous
   workflow_dispatch:
 
 jobs:
