@@ -11,6 +11,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import okhttp3.Call;
@@ -43,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class MainActivity extends Activity {
     private static final int MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_CANNA_BRIDGE_BYTES = 256 * 1024;
     private static final int MAX_ATTEMPTS = 4;
     private static final int CANNA_MAX_ATTEMPTS = 2;
     private static final int MAX_REDIRECTS = 5;
@@ -331,9 +333,76 @@ public final class MainActivity extends Activity {
                 throw new IllegalStateException("Canna Cabana returned an unexpected inventory response.");
             }
 
-            return new PageResponse(responseUrl.toString(), json);
+            String compactJson = compactCannaPayload(payload);
+            if (compactJson.getBytes(StandardCharsets.UTF_8).length > MAX_CANNA_BRIDGE_BYTES) {
+                throw new IllegalStateException("Canna Cabana compact response exceeded the bridge safety limit.");
+            }
+
+            return new PageResponse(responseUrl.toString(), compactJson);
         } finally {
             cannaCalls.remove(requestId, call);
+        }
+    }
+
+    private String compactCannaPayload(JSONObject payload) throws Exception {
+        JSONArray sourceProducts = payload.optJSONArray("data");
+        JSONObject pagination = payload.optJSONObject("pagination");
+        if (sourceProducts == null || pagination == null) {
+            throw new IllegalStateException("Canna Cabana returned an unexpected inventory response.");
+        }
+
+        JSONArray compactProducts = new JSONArray();
+        for (int i = 0; i < sourceProducts.length(); i++) {
+            JSONObject source = sourceProducts.optJSONObject(i);
+            if (source == null) continue;
+
+            JSONObject compact = new JSONObject();
+            copyJsonValue(source, compact, "id");
+            copyJsonValue(source, compact, "title");
+            copyJsonValue(source, compact, "handle");
+            copyJsonValue(source, compact, "vendor");
+            copyJsonValue(source, compact, "tags");
+
+            JSONArray sourceVariants = source.optJSONArray("variants");
+            JSONArray compactVariants = new JSONArray();
+            if (sourceVariants != null) {
+                for (int v = 0; v < sourceVariants.length(); v++) {
+                    JSONObject sourceVariant = sourceVariants.optJSONObject(v);
+                    if (sourceVariant == null) continue;
+                    JSONObject sourcePricing = sourceVariant.optJSONObject("pricing");
+                    if (sourcePricing == null) continue;
+
+                    JSONObject compactVariant = new JSONObject();
+                    copyJsonValue(sourceVariant, compactVariant, "id");
+                    copyJsonValue(sourceVariant, compactVariant, "sku");
+                    copyJsonValue(sourceVariant, compactVariant, "title");
+
+                    JSONObject compactPricing = new JSONObject();
+                    copyJsonValue(sourcePricing, compactPricing, "equivalent_g");
+                    copyJsonValue(sourcePricing, compactPricing, "thc_level");
+                    copyJsonValue(sourcePricing, compactPricing, "cbd_level");
+                    copyJsonValue(sourcePricing, compactPricing, "elite_price");
+                    copyJsonValue(sourcePricing, compactPricing, "qty_available");
+                    copyJsonValue(sourcePricing, compactPricing, "is_elite");
+                    copyJsonValue(sourcePricing, compactPricing, "elite_stores");
+                    compactVariant.put("pricing", compactPricing);
+                    compactVariants.put(compactVariant);
+                }
+            }
+
+            compact.put("variants", compactVariants);
+            compactProducts.put(compact);
+        }
+
+        JSONObject compactPayload = new JSONObject();
+        compactPayload.put("data", compactProducts);
+        compactPayload.put("pagination", pagination);
+        return compactPayload.toString();
+    }
+
+    private void copyJsonValue(JSONObject source, JSONObject target, String key) throws Exception {
+        if (source.has(key) && !source.isNull(key)) {
+            target.put(key, source.get(key));
         }
     }
 
@@ -460,43 +529,34 @@ public final class MainActivity extends Activity {
 
     private PageResponse fetchVariationOnce(String rawProductUrl, String payloadJson) throws Exception {
         URL productUrl = validateBulkBuddyUrl(rawProductUrl);
-        if (!isProductUrl(productUrl)) {
-            throw new SecurityException("Variation requests require a Bulk Buddy product page.");
+        if (!productUrl.getPath().toLowerCase(Locale.CANADA).startsWith("/product/")) {
+            throw new SecurityException("Variation verification is limited to Bulk Buddy product pages.");
         }
-
-        String body = buildVariationForm(payloadJson);
-        URL endpoint = new URL(VARIATION_ENDPOINT);
-        validateBulkBuddyScope(endpoint.toURI());
+        String form = buildVariationForm(payloadJson);
         HttpURLConnection connection = null;
-
         try {
-            connection = (HttpURLConnection) endpoint.openConnection();
-            configureConnection(connection, endpoint.toURI(), productUrl.toString());
+            connection = (HttpURLConnection) new URL(VARIATION_ENDPOINT).openConnection();
+            configureConnection(connection, new URI(BULK_BUDDY_ORIGIN + "/"), productUrl.toString());
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
             connection.setRequestProperty("X-Requested-With", "XMLHttpRequest");
-            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(bodyBytes.length);
+            connection.setRequestProperty("Accept", "application/json, text/javascript, */*; q=0.01");
 
-            try (OutputStream output = new BufferedOutputStream(connection.getOutputStream())) {
-                output.write(bodyBytes);
+            byte[] body = form.getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(body.length);
+            try (OutputStream raw = connection.getOutputStream();
+                 BufferedOutputStream output = new BufferedOutputStream(raw)) {
+                output.write(body);
+                output.flush();
             }
 
             int status = connection.getResponseCode();
             storeCookies(connection);
             if (status < 200 || status >= 300) {
-                throw new IllegalStateException(
-                        "Bulk Buddy variation endpoint returned HTTP " + status + "."
-                );
+                throw new IllegalStateException("Bulk Buddy variation verification returned HTTP " + status + ".");
             }
-
-            String json = readResponse(connection.getInputStream());
-            String trimmed = json.trim();
-            if (!("false".equals(trimmed) || trimmed.startsWith("{"))) {
-                throw new IllegalStateException("Bulk Buddy returned an unexpected variation response.");
-            }
-            return new PageResponse(productUrl.toString(), trimmed);
+            return new PageResponse(productUrl.toString(), readResponse(connection.getInputStream()));
         } finally {
             if (connection != null) connection.disconnect();
         }
