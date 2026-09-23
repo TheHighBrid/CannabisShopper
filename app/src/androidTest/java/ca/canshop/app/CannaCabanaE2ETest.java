@@ -27,20 +27,19 @@ public final class CannaCabanaE2ETest {
     public void cannaEndToEndFetchBridgePersistenceAndComparison() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             scenario.moveToState(Lifecycle.State.RESUMED);
-            WebView webView = getWebView(scenario);
-            waitForDocumentReady(webView);
+            waitForDocumentReady(scenario);
 
             long started = SystemClock.elapsedRealtime();
             assertTrue(
                     "Canna Cabana fetch button could not be invoked.",
-                    waitForCondition(webView,
+                    waitForCondition(scenario,
                             "(() => {const b=document.getElementById('fetchCannaButton'); if(!b) return false; b.click(); return true;})()",
                             5_000L)
             );
 
             assertTrue(
                     "Canna Cabana fetch did not produce a successful non-zero result inside 33 seconds.",
-                    waitForCondition(webView,
+                    waitForCondition(scenario,
                             "(() => {" +
                                     "const s=(document.getElementById('cannaStatus')?.textContent||'').toLowerCase();" +
                                     "const c=Number(document.getElementById('cannaCount')?.textContent||'0');" +
@@ -54,73 +53,71 @@ public final class CannaCabanaE2ETest {
 
             assertTrue(
                     "Saved Canna Cabana localStorage payload is empty.",
-                    waitForCondition(webView,
+                    waitForCondition(scenario,
                             "(() => {try {return JSON.parse(localStorage.getItem('canshop_cannacabana_elite_v1')||'[]').length>0;} catch(e){return false;}})()",
                             5_000L)
             );
 
             assertTrue(
                     "Rendered Canna Cabana cards do not match the saved eligible count.",
-                    waitForCondition(webView,
+                    waitForCondition(scenario,
                             "(() => {const c=Number(document.getElementById('cannaCount')?.textContent||'0'); return c>0 && document.querySelectorAll('#cannaResults .canna-card').length===c;})()",
                             5_000L)
             );
 
             assertTrue(
                     "Cross-source comparison did not receive Canna Cabana products.",
-                    waitForCondition(webView,
+                    waitForCondition(scenario,
                             "(() => {const s=document.getElementById('crossSourceSummary')?.textContent||''; return /Canna Cabana Elite 28g/.test(s) && !/^Fetch one or both/.test(s);})()",
                             5_000L)
             );
 
             assertTrue(
                     "Fetch button did not return to an enabled state after a successful request.",
-                    waitForCondition(webView,
+                    waitForCondition(scenario,
                             "(() => {const b=document.getElementById('fetchCannaButton'); return !!b && !b.disabled && /fetch elite/i.test(b.textContent||'');})()",
                             5_000L)
             );
         }
     }
 
-    private WebView getWebView(ActivityScenario<MainActivity> scenario) {
-        AtomicReference<WebView> ref = new AtomicReference<>();
-        scenario.onActivity(activity -> {
-            ViewGroup content = activity.findViewById(android.R.id.content);
-            if (content != null && content.getChildCount() > 0 && content.getChildAt(0) instanceof WebView) {
-                ref.set((WebView) content.getChildAt(0));
-            }
-        });
-        WebView webView = ref.get();
-        if (webView == null) throw new AssertionError("MainActivity WebView was not created.");
-        return webView;
+    private WebView findWebView(MainActivity activity) {
+        ViewGroup content = activity.findViewById(android.R.id.content);
+        if (content != null && content.getChildCount() > 0 && content.getChildAt(0) instanceof WebView) {
+            return (WebView) content.getChildAt(0);
+        }
+        throw new AssertionError("MainActivity WebView was not created.");
     }
 
-    private void waitForDocumentReady(WebView webView) throws Exception {
+    private void waitForDocumentReady(ActivityScenario<MainActivity> scenario) throws Exception {
         assertTrue(
                 "CanShop document did not become ready.",
-                waitForCondition(webView,
+                waitForCondition(scenario,
                         "document.readyState==='complete' && !!document.getElementById('fetchCannaButton')",
                         PAGE_READY_TIMEOUT_MS)
         );
     }
 
-    private boolean waitForCondition(WebView webView, String expression, long timeoutMs) throws Exception {
+    private boolean waitForCondition(ActivityScenario<MainActivity> scenario, String expression, long timeoutMs) throws Exception {
         long deadline = SystemClock.elapsedRealtime() + timeoutMs;
         while (SystemClock.elapsedRealtime() < deadline) {
-            String result = tryEvaluate(webView, expression);
+            String result = tryEvaluate(scenario, expression);
             if ("true".equalsIgnoreCase(result)) return true;
             SystemClock.sleep(350L);
         }
         return false;
     }
 
-    private String tryEvaluate(WebView webView, String script) throws Exception {
+    private String tryEvaluate(ActivityScenario<MainActivity> scenario, String script) throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<String> value = new AtomicReference<>("null");
-        webView.post(() -> webView.evaluateJavascript(script, result -> {
-            value.set(result == null ? "null" : result);
-            latch.countDown();
-        }));
+        scenario.onActivity(activity -> {
+            WebView webView = findWebView(activity);
+            webView.evaluateJavascript(script, result -> {
+                value.set(result == null ? "null" : result);
+                latch.countDown();
+            });
+        });
         if (!latch.await(JS_CALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             return "null";
         }
