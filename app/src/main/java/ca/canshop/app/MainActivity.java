@@ -58,6 +58,8 @@ public final class MainActivity extends Activity {
 
     private WebView webView;
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
+    // Canna Cabana gets its own thread so slow Bulk Buddy crawls can never queue it past the JS timeout.
+    private final ExecutorService cannaExecutor = Executors.newSingleThreadExecutor();
     private final java.net.CookieManager httpCookieManager =
             new java.net.CookieManager(null, CookiePolicy.ACCEPT_ALL);
     private final Map<String, Call> cannaCalls = new ConcurrentHashMap<>();
@@ -120,6 +122,7 @@ public final class MainActivity extends Activity {
         }
         cannaCalls.clear();
         networkExecutor.shutdownNow();
+        cannaExecutor.shutdownNow();
         if (webView != null) {
             webView.removeJavascriptInterface("Android");
             webView.destroy();
@@ -140,7 +143,7 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void fetchCannaCabanaPage(String requestId, String rawUrl) {
-            networkExecutor.execute(() -> fetchCannaCabanaPage(requestId, rawUrl));
+            cannaExecutor.execute(() -> fetchCannaCabanaPage(requestId, rawUrl));
         }
 
         @JavascriptInterface
@@ -224,8 +227,17 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private String snippetOf(String text) {
+        if (text == null) return "";
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() > 160 ? flat.substring(0, 160) + "…" : flat;
+    }
+
     private String errorMessage(Exception error, String fallback) {
-        return error == null || error.getMessage() == null ? fallback : error.getMessage();
+        if (error == null) return fallback;
+        String message = error.getMessage();
+        String type = error.getClass().getSimpleName();
+        return message == null || message.isEmpty() ? type : type + ": " + message;
     }
 
     private boolean isProductUrl(URL url) {
@@ -302,6 +314,9 @@ public final class MainActivity extends Activity {
                 .header("Pragma", "no-cache")
                 .header("Origin", "https://cannacabana.com")
                 .header("Referer", CANNA_CABANA_COLLECTION_URL)
+                .header("Sec-Fetch-Site", "same-site")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Dest", "empty")
                 .build();
 
         Call call = cannaHttpClient.newCall(request);
@@ -311,8 +326,20 @@ public final class MainActivity extends Activity {
             URL responseUrl = validateCannaCabanaUrl(response.request().url().toString());
 
             if (!response.isSuccessful()) {
+                String snippet = "";
+                try {
+                    ResponseBody errorBody = response.body();
+                    if (errorBody != null) snippet = snippetOf(errorBody.string());
+                } catch (Exception ignored) {
+                }
+                boolean botWall = response.header("x-datadome") != null
+                        || response.header("x-datadome-cid") != null
+                        || snippet.toLowerCase(java.util.Locale.ROOT).contains("datadome");
                 throw new IllegalStateException(
-                        "Canna Cabana returned HTTP " + response.code() + " for the Whole Flower inventory request."
+                        "Canna Cabana returned HTTP " + response.code()
+                                + (botWall ? " (bot-protection challenge)" : "")
+                                + " for the Whole Flower inventory request."
+                                + (snippet.isEmpty() ? "" : " Response began: " + snippet)
                 );
             }
 
@@ -326,9 +353,19 @@ public final class MainActivity extends Activity {
                 throw new IllegalStateException("Canna Cabana returned an unexpectedly large response.");
             }
 
-            JSONObject payload = new JSONObject(json);
+            JSONObject payload;
+            try {
+                payload = new JSONObject(json);
+            } catch (org.json.JSONException notJson) {
+                throw new IllegalStateException(
+                        "Canna Cabana returned non-JSON content (HTTP " + response.code() + "). Response began: "
+                                + snippetOf(json)
+                );
+            }
             if (payload.optJSONArray("data") == null || payload.optJSONObject("pagination") == null) {
-                throw new IllegalStateException("Canna Cabana returned an unexpected inventory response.");
+                throw new IllegalStateException(
+                        "Canna Cabana returned an unexpected inventory response. Response began: " + snippetOf(json)
+                );
             }
 
             return new PageResponse(responseUrl.toString(), json);
