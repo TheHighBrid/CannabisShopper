@@ -84,7 +84,7 @@
           }
         } catch {
         }
-        reject(new Error('Canna Cabana did not return inside the 35-second safety window.'));
+        reject(new Error('Canna Cabana gave no response (neither data nor an error) within 35 seconds. The request may be stuck in the native queue or blocked before it started.'));
       }, REQUEST_TIMEOUT_MS);
 
       pending.set(requestId, {
