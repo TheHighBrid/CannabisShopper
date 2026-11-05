@@ -165,7 +165,7 @@
     if (thc == null || thc < THC_MIN || thc > THC_MAX) {
       return { accepted: false, reason: 'thc' };
     }
-    if (elitePrice == null || elitePrice <= 0 || pricing.is_elite === false || !storeHasElitePrice(pricing)) {
+    if (elitePrice == null || elitePrice <= 0 || !storeHasElitePrice(pricing)) {
       return { accepted: false, reason: 'no-elite-price' };
     }
     if (qty == null || qty <= 0) {
@@ -444,7 +444,12 @@
       request.reject(new Error(message));
     },
     refresh: refreshCanna,
-    renderComparison
+    renderComparison,
+    normalizeCannaProduct,
+    buildApiUrl,
+    choose28gVariant,
+    getStrainType,
+    storeHasElitePrice
   };
 
   els.button?.addEventListener('click', refreshCanna);

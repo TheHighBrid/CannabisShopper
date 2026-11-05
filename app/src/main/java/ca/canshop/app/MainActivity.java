@@ -62,8 +62,10 @@ public final class MainActivity extends Activity {
     private final ExecutorService cannaExecutor = Executors.newSingleThreadExecutor();
     private final java.net.CookieManager httpCookieManager =
             new java.net.CookieManager(null, CookiePolicy.ACCEPT_ALL);
-    private final Map<String, Call> cannaCalls = new ConcurrentHashMap<>();
-    private final OkHttpClient cannaHttpClient = new OkHttpClient.Builder()
+    final Map<String, Call> cannaCalls = new ConcurrentHashMap<>();
+    final java.util.Set<String> cancelledCannaRequests =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
+    final OkHttpClient cannaHttpClient = new OkHttpClient.Builder()
             .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
@@ -71,6 +73,18 @@ public final class MainActivity extends Activity {
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
+            .addInterceptor(chain -> {
+                Request req = chain.request();
+                try {
+                    validateCannaCabanaUrl(req.url().toString());
+                } catch (Exception error) {
+                    throw new java.io.IOException(
+                            "Blocked unapproved Canna Cabana request: " + error.getMessage(),
+                            error
+                    );
+                }
+                return chain.proceed(req);
+            })
             .build();
 
     @Override
@@ -121,6 +135,7 @@ public final class MainActivity extends Activity {
             if (call != null) call.cancel();
         }
         cannaCalls.clear();
+        cancelledCannaRequests.clear();
         networkExecutor.shutdownNow();
         cannaExecutor.shutdownNow();
         if (webView != null) {
@@ -143,11 +158,14 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void fetchCannaCabanaPage(String requestId, String rawUrl) {
-            cannaExecutor.execute(() -> fetchCannaCabanaPage(requestId, rawUrl));
+            cannaExecutor.execute(() -> MainActivity.this.fetchCannaPage(requestId, rawUrl));
         }
 
         @JavascriptInterface
         public void cancelCannaCabanaRequest(String requestId) {
+            if (requestId != null) {
+                cancelledCannaRequests.add(requestId);
+            }
             Call call = cannaCalls.remove(requestId);
             if (call != null) call.cancel();
         }
@@ -193,21 +211,44 @@ public final class MainActivity extends Activity {
         dispatchFetchError(requestId, errorMessage(lastError, "Unable to verify the selected package after retries."));
     }
 
-    private void fetchCannaCabanaPage(String requestId, String rawUrl) {
+    private void fetchCannaPage(String requestId, String rawUrl) {
+        if (cancelledCannaRequests.remove(requestId)) {
+            return;
+        }
+
         Exception lastError = null;
 
         for (int attempt = 1; attempt <= CANNA_MAX_ATTEMPTS; attempt++) {
+            if (cancelledCannaRequests.contains(requestId)) {
+                cancelledCannaRequests.remove(requestId);
+                cannaCalls.remove(requestId);
+                return;
+            }
+
             try {
                 PageResponse response = fetchCannaCabanaPageOnce(requestId, rawUrl);
+                if (cancelledCannaRequests.remove(requestId)) {
+                    return;
+                }
                 dispatchCannaPage(requestId, response.url, response.html);
                 return;
             } catch (Exception error) {
                 lastError = error;
+                if (cancelledCannaRequests.contains(requestId)
+                        || (error instanceof java.io.IOException && "Canceled".equalsIgnoreCase(error.getMessage()))) {
+                    cancelledCannaRequests.remove(requestId);
+                    cannaCalls.remove(requestId);
+                    return;
+                }
                 if (!sleepBeforeRetry(attempt, CANNA_MAX_ATTEMPTS)) break;
             }
         }
 
         cannaCalls.remove(requestId);
+        if (cancelledCannaRequests.remove(requestId)) {
+            return;
+        }
+
         dispatchCannaFetchError(
                 requestId,
                 "Canna Cabana request failed inside the bounded 25-second network window: " +
@@ -348,10 +389,12 @@ public final class MainActivity extends Activity {
                 throw new IllegalStateException("Canna Cabana returned an empty response.");
             }
 
-            String json = body.string();
-            if (json.getBytes(StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
+            long contentLength = body.contentLength();
+            if (contentLength > MAX_RESPONSE_BYTES) {
                 throw new IllegalStateException("Canna Cabana returned an unexpectedly large response.");
             }
+
+            String json = readResponse(body.byteStream());
 
             JSONObject payload;
             try {
@@ -374,7 +417,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private URL validateCannaCabanaUrl(String rawUrl) throws Exception {
+    URL validateCannaCabanaUrl(String rawUrl) throws Exception {
         URI uri = new URI(rawUrl == null ? "" : rawUrl.trim());
         if (!"https".equalsIgnoreCase(uri.getScheme())) {
             throw new SecurityException("Only HTTPS Canna Cabana API requests are allowed.");
