@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.0] - 2026-11-05
+
+### Fixed
+
+- Resolved AndroidBridge `fetchCannaCabanaPage` method shadowing that caused infinite executor recursion and stalled Canna Cabana requests
+- Fixed false rejection of valid Elite strains whose API metadata returns `is_elite: false` despite positive `elite_price` at store 3658
+- Added hop-by-hop URL interceptor to validate every OkHttp request and redirect target
+- Enforced bounded memory consumption when consuming Canna Cabana JSON payloads
+- Implemented immediate cancellation tracking so canceled requests do not retry
+- Added comprehensive unit tests for Canna Cabana transport and product normalization
+
 ## [2.0.0] - 2026-07-27
 
 ### Added

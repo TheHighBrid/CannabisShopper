@@ -130,6 +130,7 @@ Public storefront layouts, product tagging, caching, and WooCommerce variation p
 - [v1.01 release notes](docs/RELEASE_NOTES_v1.01.md)
 - [v1.02 release notes](docs/RELEASE_NOTES_v1.02.md)
 - [v2.00 release notes](docs/RELEASE_NOTES_v2.00.md)
+- [v2.10 release notes](docs/RELEASE_NOTES_v2.10.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 

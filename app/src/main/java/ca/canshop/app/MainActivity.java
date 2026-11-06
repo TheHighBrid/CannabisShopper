@@ -46,7 +46,7 @@ public final class MainActivity extends Activity {
     private static final int MAX_ATTEMPTS = 4;
     private static final int CANNA_MAX_ATTEMPTS = 2;
     private static final int MAX_REDIRECTS = 5;
-    private static final String APP_VERSION = "2.0.9";
+    private static final String APP_VERSION = "2.1.0";
     private static final String BULK_BUDDY_ORIGIN = "https://www.bulkbuddy.co";
     private static final String VARIATION_ENDPOINT = BULK_BUDDY_ORIGIN + "/?wc-ajax=get_variation";
     private static final String CANNA_CABANA_API_ORIGIN = "https://app.cannacabana.com";

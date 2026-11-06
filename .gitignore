@@ -11,3 +11,5 @@ dist/
 *.log
 npm-debug.log*
 .DS_Store
+CanShop-*.apk
+CanShop-*.apk.sha256
