@@ -1428,4 +1428,11 @@
   hydratePreferences();
   if (els.ageGate) els.ageGate.hidden = localStorage.getItem(AGE_KEY) === 'true';
   render();
+
+  window.addEventListener('canshop:backup-restored', () => {
+    products = readWithMigration(STORAGE_KEY, LEGACY_STORAGE_KEYS, []);
+    preferences = migratePreferences(readWithMigration(PREFS_KEY, LEGACY_PREFS_KEYS, defaultPreferences));
+    hydratePreferences();
+    render();
+  });
 })();

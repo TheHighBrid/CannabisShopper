@@ -9,7 +9,14 @@
 - Added hop-by-hop URL interceptor to validate every OkHttp request and redirect target
 - Enforced bounded memory consumption when consuming Canna Cabana JSON payloads
 - Implemented immediate cancellation tracking so canceled requests do not retry
+- Added deterministic release signing keystore (`canshop-release.jks`) so all APK releases share identical cryptographic signatures and update in place without conflicts
 - Added comprehensive unit tests for Canna Cabana transport and product normalization
+
+### Added
+
+- In-app Research Notebook Backup & Restore system (JSON export/import, native Android share sheet, and clipboard copy) to safeguard fetched strains, preferences, and history
+- Android Auto Backup support (`android:allowBackup="true"`)
+- Automated unit test suite for backup payload generation and validation
 
 ## [2.0.0] - 2026-07-27
 

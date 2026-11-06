@@ -14,11 +14,20 @@ android {
         versionName '2.1.0'
     }
 
+    signingConfigs {
+        release {
+            storeFile file('canshop-release.jks')
+            storePassword 'canshop'
+            keyAlias 'canshop'
+            keyPassword 'canshop'
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+
     buildTypes {
         release {
-            // GitHub release builds are sideload-signed with Android's debug key.
-            // Replace this with a private release keystore before Play Store distribution.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

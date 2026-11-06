@@ -15,7 +15,10 @@ CanShop v2.10 fixes the ongoing Canna Cabana strain fetching failures and resolv
 - **Hop-by-hop URL interceptor**: Added an OkHttp application interceptor that validates every request and redirect target against `validateCannaCabanaUrl` before network transmission.
 - **Bounded response streaming**: Replaced full-body string buffering with chunked stream consumption (`readResponse(body.byteStream())`) enforcing the 8 MB payload safety ceiling.
 - **Immediate cancellation handling**: Added `cancelledCannaRequests` tracking to prevent retries or error dispatching for timed out or canceled requests.
-- **Automated test coverage**: Added unit tests for Canna Cabana normalization, URL construction, interceptor enforcement, and cancellation bridge.
+- **Deterministic release signing (`canshop-release.jks`)**: Replaced ephemeral CI debug signing with a dedicated repository release keystore. All future GitHub and local builds now share the exact same cryptographic signature, eliminating "conflicts with existing package" install errors and allowing seamless in-place APK updates without uninstalling.
+- **In-app Research Notebook Backup & Restore**: Added comprehensive backup export and restore tools (JSON file download, native Android share sheet, and clipboard copy). Users can export their Bulk Buddy strains, Canna Cabana Elite strains, search preferences, and daily history logs, and restore them instantly at any time.
+- **Android Auto Backup**: Enabled `android:allowBackup="true"` so that native Android backup systems can protect application data.
+- **Automated test coverage**: Added unit tests for Canna Cabana normalization, URL construction, interceptor enforcement, cancellation bridge, and backup export/restore parsing.
 
 ## Contract preserved
 

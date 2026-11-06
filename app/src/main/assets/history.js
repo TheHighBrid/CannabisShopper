@@ -474,5 +474,10 @@
     renderReport
   };
 
+  window.addEventListener('canshop:history-updated', () => {
+    els.enabled.checked = localStorage.getItem(HISTORY_ENABLED_KEY) === 'true';
+    renderReport();
+  });
+
   renderReport();
 })();

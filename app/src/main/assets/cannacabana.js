@@ -456,6 +456,11 @@
   els.buttonMobile?.addEventListener('click', refreshCanna);
   els.compareSort?.addEventListener('change', renderComparison);
   window.addEventListener('canshop:bulkbuddy-updated', renderComparison);
+  window.addEventListener('canshop:canna-updated', () => {
+    products = readJson(STORAGE_KEY, []);
+    renderCanna();
+    renderComparison();
+  });
 
   renderCanna();
   renderComparison();

@@ -267,6 +267,23 @@
       <section id="crossSourceResults" class="compare-results" aria-live="polite" hidden></section>
     </section>
 
+    <section id="backupSection" class="panel backup-panel">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">RESEARCH NOTEBOOK DATA</p>
+          <h2>Backup &amp; restore.</h2>
+        </div>
+        <span class="method-seal"><svg><use href="#icon-shield"></use></svg></span>
+      </div>
+      <p>Save or restore your complete research database—including Bulk Buddy strains, Canna Cabana Elite strains, search preferences, and daily history logs. Keep your data safe across app updates, devices, or cache clears.</p>
+      <div class="backup-actions">
+        <button id="exportBackupButton" class="primary" type="button"><svg><use href="#icon-shield"></use></svg> Export backup</button>
+        <button id="openRestoreDialogButton" class="secondary" type="button"><svg><use href="#icon-plus"></use></svg> Restore backup</button>
+        <button id="copyBackupButton" class="ghost" type="button">Copy to clipboard</button>
+      </div>
+      <p id="backupStatus" class="status" aria-live="polite">Ready. Back up your research notebook at any time.</p>
+    </section>
+
     <section id="about" class="panel method">
       <div class="section-heading compact">
         <div>
@@ -326,6 +343,29 @@
     </form>
   </dialog>
 
+  <dialog id="restoreDialog">
+    <form id="restoreForm" method="dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">RESEARCH NOTEBOOK</p><h2>Restore data backup.</h2></div>
+        <button type="button" id="closeRestoreDialog" class="icon-button" aria-label="Close"><svg><use href="#icon-close"></use></svg></button>
+      </div>
+      <p class="dialog-intro">Upload a CanShop backup file (<code>.json</code>) or paste backup JSON text below to restore your saved strains, preferences, and history.</p>
+      <label class="file-picker-label" for="backupFileInput">
+        <svg aria-hidden="true"><use href="#icon-shield"></use></svg>
+        <span>Select backup JSON file</span>
+        <input type="file" id="backupFileInput" accept=".json,application/json">
+      </label>
+      <div class="dialog-divider"><span>OR PASTE JSON</span></div>
+      <label>Backup JSON text
+        <textarea id="restoreJsonText" rows="6" placeholder='{"version":1,"data":{"products":[...],"cannacabana":[...]}}'></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button id="applyRestoreButton" class="primary" type="button">Restore database</button>
+        <button type="button" id="cancelRestoreButton" class="ghost">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
   <footer>
     <span class="footer-brand"><svg><use href="#icon-leaf"></use></svg> Can<span>Shop</span></span>
     <p>Independent research notebook. Retail inventory and pricing can change quickly. Verify current store availability and checkout pricing before purchasing.</p>
@@ -341,5 +381,6 @@
   <script src="history.js"></script>
   <script src="app.js"></script>
   <script src="cannacabana.js"></script>
+  <script src="backup.js"></script>
 </body>
 </html>

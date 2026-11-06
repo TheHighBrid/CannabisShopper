@@ -51,6 +51,12 @@ app/build/outputs/apk/release/app-release.apk
 
 The workflow in `.github/workflows/webpack.yml` validates the TypeScript CLI and web assets, builds the Android release APK, generates a SHA-256 file, uploads both as workflow artifacts, and publishes or refreshes tag `v1.0.0` when `main` is updated.
 
-## 5. Production signing upgrade
+## 5. Sideload release signing
 
-The public GitHub sideload build uses Android's debug signing configuration so the APK is immediately installable. Before Play Store distribution, replace `signingConfig signingConfigs.debug` in `app/build.gradle` with a private release keystore supplied through protected GitHub Actions secrets. Never commit a production private key.
+The public GitHub sideload builds are signed deterministically with the repository release keystore (`app/canshop-release.jks`). This guarantees that every local and GitHub Actions build shares the exact same cryptographic signature, enabling seamless in-place updates without package signature conflicts or data loss.
+
+## 6. Backup & restore
+
+CanShop includes an on-device Backup & Restore utility in the web UI:
+- **Export backup**: Generates a complete JSON snapshot of all saved Bulk Buddy strains, Canna Cabana Elite strains, search preferences, and daily history logs. Can be shared to Google Drive, saved to local files, or copied to clipboard.
+- **Restore backup**: Restores a previously exported JSON backup file or pasted text directly into the on-device database, rebuilding shortlists and trends immediately.
