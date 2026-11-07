@@ -115,7 +115,7 @@ public final class MainActivity extends Activity {
         settings.setSupportZoom(false);
 
         CookieManager.getInstance().setAcceptCookie(false);
-        WebView.setWebContentsDebuggingEnabled(false);
+        WebView.setWebContentsDebuggingEnabled(true);
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -253,6 +253,22 @@ public final class MainActivity extends Activity {
                 } catch (Exception ignored) {
                 }
             });
+        }
+
+        @JavascriptInterface
+        public String checkLocalBackupFile() {
+            try {
+                java.io.File dir = getExternalFilesDir(null);
+                if (dir != null) {
+                    java.io.File file = new java.io.File(dir, "canshop-backup.json");
+                    if (file.exists() && file.isFile()) {
+                        byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                        return new String(bytes, StandardCharsets.UTF_8);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            return null;
         }
     }
 

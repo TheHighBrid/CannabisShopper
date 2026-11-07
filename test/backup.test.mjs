@@ -50,6 +50,7 @@ function loadBackupModule(mockLocalStorage = {}, mockAndroid = null) {
       createObjectURL: () => 'blob:mock',
       revokeObjectURL: () => {}
     },
+    setTimeout: (fn) => fn(),
     navigator: {},
     console,
     module: { exports: {} }

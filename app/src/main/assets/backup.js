@@ -326,6 +326,37 @@
     });
   }
 
+  // Automatic migration/recovery on fresh install if backup file is present in app storage
+  function checkAndAutoRestore() {
+    try {
+      const hasHistory = !!localStorage.getItem(HISTORY_KEY);
+      const hasProducts = !!localStorage.getItem(PRODUCTS_KEY);
+      if (hasHistory || hasProducts) return;
+
+      if (typeof window !== 'undefined' && window.Android?.checkLocalBackupFile) {
+        const backupJson = window.Android.checkLocalBackupFile();
+        if (backupJson && typeof backupJson === 'string' && backupJson.trim().length > 10) {
+          const res = restoreFromText(backupJson);
+          if (res?.success) {
+            console.log('Automatically recovered CanShop research history and products from local storage.');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Auto restore check skipped:', e);
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', checkAndAutoRestore);
+    } else if (typeof setTimeout !== 'undefined') {
+      setTimeout(checkAndAutoRestore, 100);
+    } else {
+      checkAndAutoRestore();
+    }
+  }
+
   // Expose for unit testing and developer console
   if (typeof window !== 'undefined') {
     window.CanShopBackup = {
