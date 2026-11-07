@@ -20,12 +20,10 @@ CanShop v2.10 fixes the ongoing Canna Cabana strain fetching failures and resolv
 - **Android Auto Backup**: Enabled `android:allowBackup="true"` so that native Android backup systems can protect application data.
 - **Automated test coverage**: Added unit tests for Canna Cabana normalization, URL construction, interceptor enforcement, cancellation bridge, and backup export/restore parsing.
 
-## Installation Options
+## Installation
 
-- **`CanShop-v2.10-standalone.apk` (Recommended for existing users)**:
-  Installs directly alongside your current app without requiring an uninstall. Keeps your existing app and all saved data 100% safe on your phone. Package ID: `ca.canshop.app2`.
-- **`CanShop-v2.10.apk` (Standard)**:
-  Standard release package (`ca.canshop.app`) for clean installations.
+- **`CanShop-v2.10.apk`**:
+  Signed with persistent repository release keystore (`canshop-release.jks`). Supports in-app Research Notebook Backup & Restore to seamlessly migrate and preserve all historical fetch data, strains, and preferences across versions. All future updates can be installed directly in place.
 
 ## Contract preserved
 

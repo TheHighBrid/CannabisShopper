@@ -3,9 +3,14 @@
 
   const PRODUCTS_KEY = 'canshop.products.v3';
   const CANNA_KEY = 'canshop.cannacabana.v1';
-  const PREFS_KEY = 'canshop.preferences.v1';
-  const HISTORY_KEY = 'canshop.history.v1';
-  const HISTORY_ENABLED_KEY = 'canshop.history.enabled';
+  const PREFS_KEY = 'canshop.preferences.v3';
+  const LEGACY_PREFS_KEY = 'canshop.preferences.v1';
+  const HISTORY_KEY = 'canshop.fetchHistory.v2';
+  const LEGACY_HISTORY_KEY = 'canshop.history.v1';
+  const HISTORY_ENABLED_KEY = 'canshop.fetchHistory.enabled.v1';
+  const LEGACY_HISTORY_ENABLED_KEY = 'canshop.history.enabled';
+  const AGE_KEY = 'canshop.legalAgeConfirmed.v1';
+  const PREFS_MIGRATION_KEY = 'canshop.preferences.neutralized.v1';
   const BACKUP_FORMAT_VERSION = 1;
 
   const els = {
@@ -38,6 +43,12 @@
 
   function buildBackupPayload() {
     const appVersion = (typeof window !== 'undefined' && window.Android?.appVersion?.()) || '2.1.0';
+    const prefs = readJson(PREFS_KEY, null) ?? readJson(LEGACY_PREFS_KEY, null);
+    const history = readJson(HISTORY_KEY, null) ?? readJson(LEGACY_HISTORY_KEY, []);
+    const historyEnabled =
+      localStorage.getItem(HISTORY_ENABLED_KEY) === 'true' ||
+      localStorage.getItem(LEGACY_HISTORY_ENABLED_KEY) === 'true';
+
     return {
       canshop_backup_version: BACKUP_FORMAT_VERSION,
       app_version: appVersion,
@@ -45,9 +56,9 @@
       data: {
         products: readJson(PRODUCTS_KEY, []),
         cannacabana: readJson(CANNA_KEY, []),
-        preferences: readJson(PREFS_KEY, null),
-        history: readJson(HISTORY_KEY, []),
-        history_enabled: localStorage.getItem(HISTORY_ENABLED_KEY) === 'true'
+        preferences: prefs,
+        history: Array.isArray(history) ? history : [],
+        history_enabled: historyEnabled
       }
     };
   }
@@ -171,12 +182,18 @@
       }
       if (Array.isArray(source.cannacabana)) {
         result.cannacabana = source.cannacabana;
+      } else if (Array.isArray(source.canna)) {
+        result.cannacabana = source.canna;
       }
       if (source.preferences && typeof source.preferences === 'object') {
         result.preferences = source.preferences;
       }
       if (Array.isArray(source.history)) {
         result.history = source.history;
+      } else if (Array.isArray(source.fetchHistory)) {
+        result.history = source.fetchHistory;
+      } else if (Array.isArray(source.fetch_history)) {
+        result.history = source.fetch_history;
       }
       if (typeof source.history_enabled === 'boolean') {
         result.history_enabled = source.history_enabled;
@@ -218,17 +235,23 @@
 
     if (validated.preferences && typeof validated.preferences === 'object') {
       localStorage.setItem(PREFS_KEY, JSON.stringify(validated.preferences));
+      localStorage.setItem(LEGACY_PREFS_KEY, JSON.stringify(validated.preferences));
+      localStorage.setItem(PREFS_MIGRATION_KEY, 'true');
       counts.hasPreferences = true;
     }
 
     if (Array.isArray(validated.history)) {
       localStorage.setItem(HISTORY_KEY, JSON.stringify(validated.history));
+      localStorage.setItem(LEGACY_HISTORY_KEY, JSON.stringify(validated.history));
       counts.history = validated.history.length;
     }
 
     if (typeof validated.history_enabled === 'boolean') {
       localStorage.setItem(HISTORY_ENABLED_KEY, String(validated.history_enabled));
+      localStorage.setItem(LEGACY_HISTORY_ENABLED_KEY, String(validated.history_enabled));
     }
+
+    localStorage.setItem(AGE_KEY, 'true');
 
     // Trigger cross-module updates
     window.dispatchEvent(new CustomEvent('canshop:backup-restored', { detail: counts }));

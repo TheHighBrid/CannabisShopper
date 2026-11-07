@@ -14,19 +14,6 @@ android {
         versionName '2.1.0'
     }
 
-    flavorDimensions = ['channel']
-    productFlavors {
-        standard {
-            dimension 'channel'
-            applicationId 'ca.canshop.app'
-        }
-        standalone {
-            dimension 'channel'
-            applicationId 'ca.canshop.app2'
-            versionNameSuffix '-standalone'
-        }
-    }
-
     signingConfigs {
         release {
             storeFile file('canshop-release.jks')
@@ -41,8 +28,13 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            debuggable true
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.release
+            debuggable true
         }
     }
 
