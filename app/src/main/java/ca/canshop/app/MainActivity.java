@@ -533,13 +533,11 @@ public final class MainActivity extends Activity {
 
         Map<String, String> params = parseCannaQuery(uri.getRawQuery());
         requireCannaValue(params, "collection", "whole-flower");
-        requireCannaValue(params, "selectedOptions", "28 G");
         requireCannaValue(params, "storeId", "3658");
-        requireCannaValue(params, "priceType", "elite_price");
         requireCannaValue(params, "sortOrder", "asc");
         requireCannaValue(params, "sortField", "title");
-        requireCannaNumber(params, "thc_level_min", 29.97);
-        requireCannaNumber(params, "thc_level_max", 34.97);
+        requireCannaNumberAtLeast(params, "thc_level_min", 28.0);
+        requireCannaNumberAtMost(params, "thc_level_max", 100.0);
         requireCannaNumber(params, "price_min", 0.0);
         requireCannaNumber(params, "cbd_level_min", 0.0);
         requireCannaNumber(params, "cbd_level_max", 100.0);
@@ -610,6 +608,36 @@ public final class MainActivity extends Activity {
         try {
             double parsed = Double.parseDouble(value);
             if (Math.abs(parsed - expected) > 0.0001) {
+                throw new SecurityException("Canna Cabana request has an unexpected " + key + " filter.");
+            }
+        } catch (NumberFormatException error) {
+            throw new SecurityException("Canna Cabana request has an invalid " + key + " filter.");
+        }
+    }
+
+    private void requireCannaNumberAtLeast(Map<String, String> params, String key, double minExpected) {
+        String value = params.get(key);
+        if (value == null) {
+            throw new SecurityException("Canna Cabana request is missing " + key + ".");
+        }
+        try {
+            double parsed = Double.parseDouble(value);
+            if (parsed < minExpected) {
+                throw new SecurityException("Canna Cabana request has an unexpected " + key + " filter.");
+            }
+        } catch (NumberFormatException error) {
+            throw new SecurityException("Canna Cabana request has an invalid " + key + " filter.");
+        }
+    }
+
+    private void requireCannaNumberAtMost(Map<String, String> params, String key, double maxExpected) {
+        String value = params.get(key);
+        if (value == null) {
+            throw new SecurityException("Canna Cabana request is missing " + key + ".");
+        }
+        try {
+            double parsed = Double.parseDouble(value);
+            if (parsed > maxExpected) {
                 throw new SecurityException("Canna Cabana request has an unexpected " + key + " filter.");
             }
         } catch (NumberFormatException error) {

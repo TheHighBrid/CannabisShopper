@@ -7,10 +7,10 @@
   const SHOP_ORIGIN = 'https://cannacabana.com';
   const STORE_ID = '3658';
   const COLLECTION = 'whole-flower';
-  const SIZE_LABEL = '28 G';
-  const SIZE_GRAMS = 28;
-  const THC_MIN = 29.97;
-  const THC_MAX = 34.97;
+  const MIN_SIZE_GRAMS = 14;
+  const MAX_SIZE_GRAMS = 28;
+  const THC_MIN = 29.0;
+  const THC_MAX = 100.0;
   const REQUEST_TIMEOUT_MS = 35_000;
   const pending = new Map();
 
@@ -105,7 +105,6 @@
   function buildApiUrl(page = 1) {
     const url = new URL('/api/product/filterv2', API_ORIGIN);
     const params = url.searchParams;
-    params.set('selectedOptions', SIZE_LABEL);
     params.set('collection', COLLECTION);
     params.set('price_min', '0');
     params.set('cbd_level_min', '0');
@@ -117,21 +116,32 @@
     params.set('limit', '100');
     params.set('sortOrder', 'asc');
     params.set('sortField', 'title');
-    params.set('priceType', 'elite_price');
     return url.toString();
   }
 
-  function is28gVariant(variant) {
+  function getVariantGrams(variant) {
     const pricing = variant?.pricing || {};
     const equivalent = numberOrNull(pricing.equivalent_g);
+    if (equivalent != null && equivalent > 0) {
+      return equivalent;
+    }
     const title = normalizeText(variant?.title || '');
-    return (equivalent != null && Math.abs(equivalent - SIZE_GRAMS) < 0.05)
-      || /^28\s*g(?:rams?)?$/i.test(title);
+    const match = title.match(/(\d+(?:\.\d+)?)\s*g(?:rams?)?/i);
+    if (match) {
+      const parsed = parseFloat(match[1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return null;
   }
 
-  function choose28gVariant(product) {
+  function isQualifyingSize(grams) {
+    if (grams == null) return false;
+    return grams >= (MIN_SIZE_GRAMS - 0.1) && grams <= (MAX_SIZE_GRAMS + 0.1);
+  }
+
+  function getQualifyingVariants(product) {
     const variants = Array.isArray(product?.variants) ? product.variants : [];
-    return variants.find(is28gVariant) || null;
+    return variants.filter(v => isQualifyingSize(getVariantGrams(v)));
   }
 
   function getStrainType(product) {
@@ -149,31 +159,40 @@
     return stores.split(',').map(value => value.trim()).includes(STORE_ID);
   }
 
-  function normalizeCannaProduct(product) {
-    const variant = choose28gVariant(product);
-    if (!variant) return { accepted: false, reason: 'wrong-size' };
-
-    const pricing = variant.pricing || {};
-    const thc = numberOrNull(pricing.thc_level);
-    const elitePrice = numberOrNull(pricing.elite_price);
-    const qty = numberOrNull(pricing.qty_available);
-    const exactSize = numberOrNull(pricing.equivalent_g);
-
-    if (exactSize != null && Math.abs(exactSize - SIZE_GRAMS) >= 0.05) {
+  function normalizeCannaVariant(product, variant) {
+    const grams = getVariantGrams(variant);
+    if (!isQualifyingSize(grams)) {
       return { accepted: false, reason: 'wrong-size' };
     }
+
+    const pricing = variant?.pricing || {};
+    const thc = numberOrNull(pricing.thc_level);
+    const qty = numberOrNull(pricing.qty_available);
+
     if (thc == null || thc < THC_MIN || thc > THC_MAX) {
       return { accepted: false, reason: 'thc' };
-    }
-    if (elitePrice == null || elitePrice <= 0 || !storeHasElitePrice(pricing)) {
-      return { accepted: false, reason: 'no-elite-price' };
     }
     if (qty == null || qty <= 0) {
       return { accepted: false, reason: 'out-of-stock' };
     }
 
+    const rawElite = numberOrNull(pricing.elite_price);
+    const hasElite = rawElite != null && rawElite > 0 && storeHasElitePrice(pricing);
+    const elitePrice = hasElite ? rawElite : null;
+
+    const memberPrice = numberOrNull(pricing.member_price);
+    const retailPrice = numberOrNull(pricing.retail_price);
+    const regularPrice = (memberPrice != null && memberPrice > 0) ? memberPrice : retailPrice;
+
+    const displayPrice = hasElite ? elitePrice : regularPrice;
+    if (displayPrice == null || displayPrice <= 0) {
+      return { accepted: false, reason: 'no-price' };
+    }
+
     const handle = normalizeText(product?.handle || '');
     const sku = normalizeText(variant?.sku || variant?.id || product?.id || handle);
+    const sizeLabel = normalizeText(variant?.title) || `${grams} G`;
+
     return {
       accepted: true,
       item: {
@@ -184,14 +203,51 @@
         strainType: getStrainType(product),
         thc,
         cbd: numberOrNull(pricing.cbd_level),
+        hasElite,
         elitePrice,
-        sizeGrams: SIZE_GRAMS,
-        pricePerGram: round(elitePrice / SIZE_GRAMS, 2),
+        regularPrice,
+        price: displayPrice,
+        priceType: hasElite ? 'Elite' : 'Regular',
+        sizeGrams: grams,
+        sizeLabel,
+        pricePerGram: round(displayPrice / grams, 2),
         qtyAvailable: qty,
         source: 'Canna Cabana',
         sourceUrl: handle ? `${SHOP_ORIGIN}/products/${encodeURIComponent(handle)}?sID=${STORE_ID}` : `${SHOP_ORIGIN}/collections/whole-flower?sID=${STORE_ID}`,
         fetchedAt: new Date().toISOString()
       }
+    };
+  }
+
+  function normalizeCannaProduct(product) {
+    const qualifying = getQualifyingVariants(product);
+    if (!qualifying.length) return { accepted: false, reason: 'wrong-size' };
+
+    const items = [];
+    let lastReason = 'unknown';
+    for (const v of qualifying) {
+      const res = normalizeCannaVariant(product, v);
+      if (res.accepted) {
+        items.push(res.item);
+      } else {
+        lastReason = res.reason;
+      }
+    }
+
+    if (!items.length) {
+      return { accepted: false, reason: lastReason };
+    }
+
+    // Sort: Elites first, then best value
+    items.sort((a, b) => {
+      if (a.hasElite !== b.hasElite) return a.hasElite ? -1 : 1;
+      return a.pricePerGram - b.pricePerGram;
+    });
+
+    return {
+      accepted: true,
+      item: items[0],
+      items
     };
   }
 
@@ -201,7 +257,7 @@
     let totalPages = 1;
 
     do {
-      setStatus(`Fetching Canna Cabana Elite 28g inventory… page ${page} of ${totalPages}.`);
+      setStatus(`Fetching Canna Cabana inventory (14g–28g, ≥29% THC)… page ${page} of ${totalPages}.`);
       const response = await requestPage(buildApiUrl(page));
       let payload;
       try {
@@ -233,12 +289,12 @@
     if (els.button) {
       els.button.disabled = value;
       els.button.innerHTML = value
-        ? 'Fetching Elite 28g inventory…'
-        : '<svg><use href="#icon-refresh"></use></svg> Fetch Elite';
+        ? 'Fetching Canna Cabana strains…'
+        : '<svg><use href="#icon-refresh"></use></svg> Fetch Strains';
     }
     if (els.buttonMobile) {
       els.buttonMobile.disabled = value;
-      els.buttonMobile.textContent = value ? 'Fetching Elite 28g inventory…' : 'Fetch Canna Cabana Elite';
+      els.buttonMobile.textContent = value ? 'Fetching Canna Cabana strains…' : 'Fetch Canna Cabana Strains';
     }
   }
 
@@ -252,33 +308,60 @@
       const counts = {
         wrongSize: 0,
         thc: 0,
-        noElite: 0,
-        soldOut: 0
+        soldOut: 0,
+        noPrice: 0
       };
       const accepted = [];
 
       for (const product of raw) {
-        const parsed = normalizeCannaProduct(product);
-        if (parsed.accepted) {
-          accepted.push(parsed.item);
+        const qualifyingVariants = getQualifyingVariants(product);
+        if (qualifyingVariants.length === 0) {
+          counts.wrongSize += 1;
           continue;
         }
-        if (parsed.reason === 'wrong-size') counts.wrongSize += 1;
-        else if (parsed.reason === 'thc') counts.thc += 1;
-        else if (parsed.reason === 'no-elite-price') counts.noElite += 1;
-        else if (parsed.reason === 'out-of-stock') counts.soldOut += 1;
+        for (const variant of qualifyingVariants) {
+          const parsed = normalizeCannaVariant(product, variant);
+          if (parsed.accepted) {
+            accepted.push(parsed.item);
+          } else if (parsed.reason === 'thc') {
+            counts.thc += 1;
+          } else if (parsed.reason === 'out-of-stock') {
+            counts.soldOut += 1;
+          } else if (parsed.reason === 'no-price') {
+            counts.noPrice += 1;
+          }
+        }
       }
 
+      // Group and sort: ELITES FIRST, then regular strains (both sorted by price/value)
       products = [...new Map(accepted.map(item => [item.sku || item.id, item])).values()]
-        .sort((a, b) => a.name.localeCompare(b.name, 'en-CA', { sensitivity: 'base' }));
+        .sort((a, b) => {
+          // 1. Elites first
+          if (a.hasElite !== b.hasElite) {
+            return a.hasElite ? -1 : 1;
+          }
+          // 2. Lowest price / pricePerGram
+          if (a.pricePerGram !== b.pricePerGram) {
+            return a.pricePerGram - b.pricePerGram;
+          }
+          // 3. Highest THC
+          if (b.thc !== a.thc) {
+            return b.thc - a.thc;
+          }
+          // 4. Name alphabetical
+          return a.name.localeCompare(b.name, 'en-CA', { sensitivity: 'base' });
+        });
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
       renderCanna();
       renderComparison();
+
+      const eliteCount = products.filter(p => p.hasElite).length;
+      const regularCount = products.length - eliteCount;
+
       setStatus(
-        `Fetched ${products.length} available Elite-priced 28g Whole Flower product${products.length === 1 ? '' : 's'} at store 3658 within ${THC_MIN.toFixed(2)}–${THC_MAX.toFixed(2)}% THC.` +
-        ` Market/member prices ignored.${counts.noElite ? ` ${counts.noElite} non-Elite result${counts.noElite === 1 ? '' : 's'} excluded.` : ''}` +
-        `${counts.soldOut ? ` ${counts.soldOut} out-of-stock result${counts.soldOut === 1 ? '' : 's'} excluded.` : ''}`
+        `Fetched ${products.length} whole-flower strains (14g–28g, ≥29% THC) at store 3658: ${eliteCount} with Elite pricing, ${regularCount} with regular member pricing.` +
+        `${counts.soldOut ? ` ${counts.soldOut} out-of-stock excluded.` : ''}`
       );
     } catch (error) {
       products = previous;
@@ -300,12 +383,31 @@
 
   function renderCanna() {
     const eligible = products.filter(item =>
-      item && item.elitePrice > 0 && item.qtyAvailable > 0 &&
+      item && item.price > 0 && item.qtyAvailable > 0 &&
       item.thc >= THC_MIN && item.thc <= THC_MAX &&
-      Math.abs(Number(item.sizeGrams) - SIZE_GRAMS) < 0.05
+      isQualifyingSize(Number(item.sizeGrams))
     );
 
-    if (els.count) els.count.textContent = String(eligible.length);
+    // Sort: Elites first, then regular strains (both by pricePerGram, then THC, then name)
+    eligible.sort((a, b) => {
+      if (a.hasElite !== b.hasElite) {
+        return a.hasElite ? -1 : 1;
+      }
+      if (a.pricePerGram !== b.pricePerGram) {
+        return a.pricePerGram - b.pricePerGram;
+      }
+      if (b.thc !== a.thc) {
+        return b.thc - a.thc;
+      }
+      return a.name.localeCompare(b.name, 'en-CA', { sensitivity: 'base' });
+    });
+
+    const eliteCount = eligible.filter(item => item.hasElite).length;
+    const regularCount = eligible.length - eliteCount;
+
+    if (els.count) {
+      els.count.textContent = String(eligible.length);
+    }
     if (els.bestValue) {
       const values = eligible.map(item => item.pricePerGram).filter(Number.isFinite);
       els.bestValue.textContent = values.length ? `$${Math.min(...values).toFixed(2)}/g` : '—';
@@ -318,30 +420,40 @@
     if (!els.results) return;
 
     els.results.hidden = eligible.length === 0;
-    els.results.innerHTML = eligible
-      .sort((a, b) => a.elitePrice - b.elitePrice || b.thc - a.thc || a.name.localeCompare(b.name))
-      .map((item, index) => `
-        <article class="canna-card">
+    els.results.innerHTML = eligible.map((item, index) => {
+      const isElite = item.hasElite;
+      const cardClass = isElite ? 'canna-card elite-card' : 'canna-card regular-card';
+      const labelClass = isElite ? 'source-label' : 'source-label regular-label';
+      const badgeText = isElite ? 'CANNA CABANA · ELITE' : 'CANNA CABANA · REGULAR';
+      const priceTitle = isElite ? 'Elite price' : 'Regular price';
+      const gTitle = isElite ? 'Elite $/g' : 'Regular $/g';
+      const footNote = isElite
+        ? 'Elite discount applied'
+        : 'Regular member price (no Elite discount)';
+
+      return `
+        <article class="${cardClass}">
           <div class="source-card-head">
             <span class="rank source-rank">${index + 1}</span>
             <div>
-              <p class="source-label">CANNA CABANA · ELITE</p>
+              <p class="${labelClass}">${badgeText}</p>
               <h3>${escapeHtml(item.name)}</h3>
               <p>${escapeHtml(item.vendor || item.strainType)}${item.vendor && item.strainType !== 'Unknown' ? ` · ${escapeHtml(item.strainType)}` : ''}</p>
             </div>
           </div>
           <div class="common-facts">
             <div><span>THC</span><strong>${item.thc.toFixed(2)}%</strong></div>
-            <div><span>Size</span><strong>28 G</strong></div>
-            <div><span>Elite price</span><strong>${escapeHtml(formatMoney(item.elitePrice))}</strong></div>
-            <div><span>Elite $/g</span><strong>$${item.pricePerGram.toFixed(2)}</strong></div>
+            <div><span>Size</span><strong>${escapeHtml(item.sizeLabel || `${item.sizeGrams} G`)}</strong></div>
+            <div><span>${priceTitle}</span><strong>${escapeHtml(formatMoney(item.price))}</strong></div>
+            <div><span>${gTitle}</span><strong>$${item.pricePerGram.toFixed(2)}</strong></div>
           </div>
           <div class="source-card-foot">
             <span>${Math.round(item.qtyAvailable)} available at selected store</span>
-            <span>Market price ignored</span>
+            <span>${footNote}</span>
           </div>
         </article>
-      `).join('');
+      `;
+    }).join('');
   }
 
   function normalizeBulkForComparison(raw) {
@@ -368,19 +480,19 @@
   }
 
   function normalizeCannaForComparison(item) {
-    if (!item || item.elitePrice <= 0 || item.qtyAvailable <= 0 || !Number.isFinite(item.thc)) return null;
+    if (!item || item.price <= 0 || item.qtyAvailable <= 0 || !Number.isFinite(item.thc)) return null;
     return {
       id: item.id,
       name: item.name,
-      source: 'Canna Cabana',
-      sourceClass: 'canna',
+      source: item.hasElite ? 'Canna Cabana (Elite)' : 'Canna Cabana',
+      sourceClass: item.hasElite ? 'canna' : 'canna-regular',
       strainType: item.strainType,
       thc: item.thc,
       thcDisplay: `${item.thc.toFixed(2)}%`,
-      price: item.elitePrice,
-      grams: SIZE_GRAMS,
+      price: item.price,
+      grams: item.sizeGrams,
       pricePerGram: item.pricePerGram,
-      priceLabel: '28 G Elite'
+      priceLabel: `${item.sizeLabel || `${item.sizeGrams} G`} ${item.hasElite ? 'Elite' : 'Regular'}`
     };
   }
 
@@ -402,11 +514,11 @@
     });
 
     const bulkCount = items.filter(item => item.source === 'Bulk Buddy').length;
-    const cannaCount = items.filter(item => item.source === 'Canna Cabana').length;
+    const cannaCount = items.filter(item => item.source.startsWith('Canna Cabana')).length;
 
     if (els.compareSummary) {
       els.compareSummary.textContent = items.length
-        ? `${items.length} comparable available products · ${bulkCount} Bulk Buddy 1 oz · ${cannaCount} Canna Cabana Elite 28g`
+        ? `${items.length} comparable available products · ${bulkCount} Bulk Buddy 1 oz · ${cannaCount} Canna Cabana`
         : 'Fetch one or both sources to build the common-field comparison.';
     }
     if (els.compareEmpty) els.compareEmpty.hidden = items.length > 0;
@@ -446,8 +558,12 @@
     refresh: refreshCanna,
     renderComparison,
     normalizeCannaProduct,
+    normalizeCannaVariant,
     buildApiUrl,
-    choose28gVariant,
+    getVariantGrams,
+    isQualifyingSize,
+    getQualifyingVariants,
+    choose28gVariant: (p) => getQualifyingVariants(p)[0] || null,
     getStrainType,
     storeHasElitePrice
   };

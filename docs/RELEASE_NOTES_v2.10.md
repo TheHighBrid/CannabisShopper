@@ -27,10 +27,10 @@ CanShop v2.10 fixes the ongoing Canna Cabana strain fetching failures and resolv
 
 ## Contract preserved
 
-The Canna Cabana integration remains locked to:
+The Canna Cabana integration is configured to:
 - Whole Flower collection
-- 28 G package size
-- THC 29.97% to 34.97%
+- 14 G to 28 G package size range (14g, 15g, 28g, and everything between)
+- THC >= 29%
 - Store 3658
-- Elite price only
+- Elites listed first with Elite pricing, followed by regular member-priced strains
 - Positive quantity available

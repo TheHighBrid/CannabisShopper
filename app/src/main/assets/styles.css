@@ -736,6 +736,16 @@ dialog::backdrop { background: rgba(1,10,6,.84); backdrop-filter: blur(10px); }
   background: rgba(242, 229, 109, .07);
 }
 
+.source-badge.canna-regular {
+  color: #79c0ff;
+  border-color: rgba(121, 192, 255, .34);
+  background: rgba(121, 192, 255, .07);
+}
+
+.source-label.regular-label {
+  color: #79c0ff;
+}
+
 .compare-rank {
   color: var(--muted-2);
   font-size: 11px;

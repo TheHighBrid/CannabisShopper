@@ -23,7 +23,7 @@ public class CannaCabanaTransportTest {
     }
 
     private static final String VALID_URL =
-            "https://app.cannacabana.com/api/product/filterv2?selectedOptions=28+G&collection=whole-flower&price_min=0&cbd_level_min=0&cbd_level_max=100&thc_level_min=29.97&thc_level_max=34.97&storeId=3658&page=1&limit=100&sortOrder=asc&sortField=title&priceType=elite_price";
+            "https://app.cannacabana.com/api/product/filterv2?collection=whole-flower&price_min=0&cbd_level_min=0&cbd_level_max=100&thc_level_min=29&thc_level_max=100&storeId=3658&page=1&limit=100&sortOrder=asc&sortField=title";
 
     @Test
     public void testValidateCannaCabanaUrl_validUrl() throws Exception {
@@ -54,8 +54,8 @@ public class CannaCabanaTransportTest {
     }
 
     @Test(expected = SecurityException.class)
-    public void testValidateCannaCabanaUrl_rejectsWrongSize() throws Exception {
-        activity.validateCannaCabanaUrl(VALID_URL.replace("selectedOptions=28+G", "selectedOptions=3.5+G"));
+    public void testValidateCannaCabanaUrl_rejectsLowThc() throws Exception {
+        activity.validateCannaCabanaUrl(VALID_URL.replace("thc_level_min=29", "thc_level_min=15"));
     }
 
     @Test(expected = SecurityException.class)

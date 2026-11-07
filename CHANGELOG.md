@@ -6,6 +6,7 @@
 
 - Resolved AndroidBridge `fetchCannaCabanaPage` method shadowing that caused infinite executor recursion and stalled Canna Cabana requests
 - Fixed false rejection of valid Elite strains whose API metadata returns `is_elite: false` despite positive `elite_price` at store 3658
+- Expanded Canna Cabana whole flower scope to include 14g to 28g with >= 29% THC, ordering Elite-discounted strains first followed by regular member-priced strains
 - Added hop-by-hop URL interceptor to validate every OkHttp request and redirect target
 - Enforced bounded memory consumption when consuming Canna Cabana JSON payloads
 - Implemented immediate cancellation tracking so canceled requests do not retry
