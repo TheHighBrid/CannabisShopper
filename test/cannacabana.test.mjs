@@ -87,6 +87,61 @@ test('buildApiUrl generates locked Whole Flower query parameters with THC >= 29'
   assert.equal(parsed.searchParams.get('sortField'), 'title');
 });
 
+function mockRefresh(savedInventory = []) {
+  const requests = [];
+  const cancellations = [];
+  const timers = new Map();
+  const status = { textContent: '', classList: { toggle() {} } };
+  const storage = new Map([['canshop.cannacabana.v1', JSON.stringify(savedInventory)]]);
+  const browser = {
+    Android: {
+      fetchCannaCabanaPage(id, url) { requests.push({ id, url }); },
+      cancelCannaCabanaRequest(id) { cancellations.push(id); }
+    },
+    addEventListener() {},
+    setTimeout(callback, delay) {
+      timers.set(callback, delay);
+      return callback;
+    },
+    clearTimeout(timer) { timers.delete(timer); }
+  };
+  new Function('window', 'document', 'localStorage', code)(
+    browser,
+    { querySelector: selector => selector === '#cannaStatus' ? status : null },
+    { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) }
+  );
+  return { canna: browser.CanShopCanna, requests, cancellations, timers, status, storage };
+}
+
+test('refresh allows both native attempts time to finish and saves the received inventory', async () => {
+  const { canna, requests, timers, status, storage } = mockRefresh();
+  const refresh = canna.refresh();
+  const [{ id, url }] = requests;
+
+  assert.ok([...timers.values()][0] > 2 * 28_000 + 750);
+  canna.receivePage(id, url, JSON.stringify({ data: [mockProduct()], pagination: { totalPages: 1 } }));
+  await refresh;
+
+  assert.equal(timers.size, 0);
+  assert.equal(JSON.parse(storage.get('canshop.cannacabana.v1')).length, 1);
+  assert.match(status.textContent, /^Fetched 1 /);
+});
+
+test('a timed-out refresh cancels the bridge request and keeps saved inventory', async () => {
+  const savedInventory = [normalizeCannaProduct(mockProduct()).item];
+  const { canna, requests, cancellations, timers, status, storage } = mockRefresh(savedInventory);
+  const refresh = canna.refresh();
+  const [{ id, url }] = requests;
+  const [expire] = timers.keys();
+  expire();
+  await refresh;
+  canna.receivePage(id, url, JSON.stringify({ data: [], pagination: { totalPages: 1 } }));
+
+  assert.deepEqual(cancellations, [id]);
+  assert.deepEqual(JSON.parse(storage.get('canshop.cannacabana.v1')), savedInventory);
+  assert.match(status.textContent, /^Showing saved inventory\. Canna Cabana took too long/);
+});
+
 test('normalizeCannaProduct accepts valid 28g Elite products with is_elite: true', () => {
   const product = mockProduct();
   const result = normalizeCannaProduct(product);

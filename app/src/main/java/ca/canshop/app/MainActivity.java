@@ -29,6 +29,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
@@ -75,9 +76,10 @@ public final class MainActivity extends Activity {
             Collections.newSetFromMap(new ConcurrentHashMap<>());
     final OkHttpClient cannaHttpClient = new OkHttpClient.Builder()
             .connectTimeout(6, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
+            // Inventory responses can take more than 10 seconds to send the first byte.
+            .readTimeout(25, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
-            .callTimeout(12, TimeUnit.SECONDS)
+            .callTimeout(28, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
@@ -347,8 +349,9 @@ public final class MainActivity extends Activity {
 
         dispatchCannaFetchError(
                 requestId,
-                "Canna Cabana request failed inside the bounded 25-second network window: " +
-                        errorMessage(lastError, "unknown network error")
+                lastError instanceof InterruptedIOException
+                        ? "Canna Cabana took too long to respond. Please try refreshing again."
+                        : errorMessage(lastError, "Unable to fetch Canna Cabana inventory.")
         );
     }
 
@@ -458,6 +461,7 @@ public final class MainActivity extends Activity {
 
         Call call = cannaHttpClient.newCall(request);
         cannaCalls.put(requestId, call);
+        if (cancelledCannaRequests.contains(requestId)) call.cancel();
 
         try (Response response = call.execute()) {
             URL responseUrl = validateCannaCabanaUrl(response.request().url().toString());
