@@ -447,6 +447,7 @@
             <div><span>${priceTitle}</span><strong>${escapeHtml(formatMoney(item.price))}</strong></div>
             <div><span>${gTitle}</span><strong>$${item.pricePerGram.toFixed(2)}</strong></div>
           </div>
+          ${window.CanShopInsights?.render(item, {source: "canna"}) || ""}
           <div class="source-card-foot">
             <span>${Math.round(item.qtyAvailable)} available at selected store</span>
             <span>${footNote}</span>

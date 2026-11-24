@@ -478,6 +478,7 @@
             ${packagePriceHtml('Quarter Pound', item.quarterPoundPrice, PACKAGE_GRAMS.quarterPound, item.quarterPoundAvailable)}
           </div>
           <p class="reason">${escapeHtml(explanation + warning)}</p>
+          ${window.CanShopInsights?.render(item, {source: "bulk"}) || ""}
           <div class="card-actions">
             <span class="source-label">${escapeHtml(item.source)}</span>
             <button class="remove" data-remove="${escapeHtml(item.id)}">Remove</button>
