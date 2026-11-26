@@ -67,8 +67,8 @@ public class CannaCabanaTransportTest {
     public void testCannaHttpClient_timeouts() {
         OkHttpClient client = activity.cannaHttpClient;
         assertEquals(6000, client.connectTimeoutMillis());
-        assertEquals(10000, client.readTimeoutMillis());
-        assertEquals(12000, client.callTimeoutMillis());
+        assertEquals(25000, client.readTimeoutMillis());
+        assertEquals(28000, client.callTimeoutMillis());
     }
 
     @Test

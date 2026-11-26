@@ -11,7 +11,8 @@
   const MAX_SIZE_GRAMS = 28;
   const THC_MIN = 29.0;
   const THC_MAX = 100.0;
-  const REQUEST_TIMEOUT_MS = 35_000;
+  // Leave room for two native calls of up to 28 seconds, retry delay, and bridge delivery.
+  const REQUEST_TIMEOUT_MS = 65_000;
   const pending = new Map();
 
   const els = {
@@ -84,7 +85,7 @@
           }
         } catch {
         }
-        reject(new Error('Canna Cabana gave no response (neither data nor an error) within 35 seconds. The request may be stuck in the native queue or blocked before it started.'));
+        reject(new Error('Canna Cabana took too long to respond. Please try refreshing again.'));
       }, REQUEST_TIMEOUT_MS);
 
       pending.set(requestId, {
@@ -367,7 +368,8 @@
       products = previous;
       renderCanna();
       renderComparison();
-      setStatus(error instanceof Error ? error.message : 'Unable to fetch Canna Cabana inventory.', true);
+      const message = error instanceof Error ? error.message : 'Unable to fetch Canna Cabana inventory.';
+      setStatus(previous.length ? `Showing saved inventory. ${message}` : message, true);
     } finally {
       setFetching(false);
     }
