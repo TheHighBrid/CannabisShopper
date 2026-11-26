@@ -873,3 +873,18 @@ dialog::backdrop { background: rgba(1,10,6,.84); backdrop-filter: blur(10px); }
   line-height: 1.4;
   resize: vertical;
 }
+
+
+/* Evidence stamps: editorial typography, no motion or external assets. */
+.cs-insights { margin: 14px 0 0; padding: 12px; border: 1px solid rgba(184,195,74,.24); border-radius: 14px; background: rgba(6,18,13,.42); }
+.cs-insight-label { color: #b8c34a; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.cs-stamps { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
+.cs-stamp { display: inline-block; padding: 5px 8px; border: 1px dashed currentColor; border-radius: 4px; color: #c9ddba; font: 800 10px/1.2 system-ui,sans-serif; letter-spacing: .06em; transform: rotate(-2deg); overflow-wrap: anywhere; }
+.cs-stamp:nth-child(even) { transform: rotate(2deg); }
+.cs-stamp--muted { color: #e8d4a0; background: rgba(232,212,160,.07); }
+.cs-verdict { margin: 8px 0; color: #e8f5e9; font-size: 12px; line-height: 1.6; }
+.cs-evidence { color: #c9d5c3; font-size: 11px; line-height: 1.55; }
+.cs-evidence summary { cursor: pointer; padding: 6px 0; color: #c9ddba; }
+.cs-evidence summary:focus-visible { outline: 2px solid #b8c34a; outline-offset: 3px; }
+.cs-evidence ul { margin: 6px 0 0; padding-left: 18px; }
+.cs-evidence li + li { margin-top: 4px; }
